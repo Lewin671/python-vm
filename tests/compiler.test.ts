@@ -1,6 +1,63 @@
 import { PythonCompiler } from '../src/compiler';
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+
+const pythonCommandCandidates = [
+  process.env.PYTHON,
+  'python3',
+  'python',
+].filter(Boolean) as string[];
+
+const runPython = (code: string): string => {
+  let lastError: unknown;
+  for (const cmd of pythonCommandCandidates) {
+    try {
+      return execFileSync(cmd, ['-c', code], { encoding: 'utf8' });
+    } catch (error) {
+      lastError = error;
+    }
+  }
+
+  throw new Error(
+    `Unable to execute Python interpreter. Tried: ${pythonCommandCandidates.join(', ')}. ` +
+      `Last error: ${String(lastError)}`
+  );
+};
+
+const runPythonFile = (filePath: string): string => {
+  const code = fs.readFileSync(filePath, 'utf8');
+  return runPython(code);
+};
+
+const runCompilerWithOutput = (fn: () => void): string => {
+  const outputChunks: string[] = [];
+  const logSpy = jest.spyOn(console, 'log').mockImplementation((...args: unknown[]) => {
+    outputChunks.push(`${args.join(' ')}\n`);
+  });
+  const writeSpy = jest
+    .spyOn(process.stdout, 'write')
+    .mockImplementation((chunk: any, encoding?: any, cb?: any) => {
+      const normalized =
+        typeof chunk === 'string' ? chunk : chunk.toString(encoding ?? 'utf8');
+      outputChunks.push(normalized);
+      if (typeof encoding === 'function') {
+        encoding();
+      } else if (typeof cb === 'function') {
+        cb();
+      }
+      return true;
+    });
+
+  try {
+    fn();
+  } finally {
+    logSpy.mockRestore();
+    writeSpy.mockRestore();
+  }
+
+  return outputChunks.join('');
+};
 
 describe('PythonCompiler', () => {
   let compiler: PythonCompiler;
@@ -12,15 +69,20 @@ describe('PythonCompiler', () => {
   describe('Hello World', () => {
     it('should execute simple print statement', () => {
       const code = 'print("Hello, World!")';
-      const result = compiler.run(code);
-      expect(result).toBeUndefined(); // print 返回 undefined
+      const expectedOutput = runPython(code);
+      const actualOutput = runCompilerWithOutput(() => {
+        compiler.run(code);
+      });
+      expect(actualOutput).toBe(expectedOutput);
     });
 
     it('should run hello.py example', () => {
       const filePath = path.join(__dirname, '../examples/hello.py');
-      expect(() => {
+      const expectedOutput = runPythonFile(filePath);
+      const actualOutput = runCompilerWithOutput(() => {
         compiler.runFile(filePath);
-      }).not.toThrow();
+      });
+      expect(actualOutput).toBe(expectedOutput);
     });
   });
 
@@ -48,9 +110,11 @@ result = x + y
 
     it('should run math.py example', () => {
       const filePath = path.join(__dirname, '../examples/math.py');
-      expect(() => {
+      const expectedOutput = runPythonFile(filePath);
+      const actualOutput = runCompilerWithOutput(() => {
         compiler.runFile(filePath);
-      }).not.toThrow();
+      });
+      expect(actualOutput).toBe(expectedOutput);
     });
   });
 
@@ -93,9 +157,11 @@ result = fibonacci(5)
 
     it('should run fibonacci.py example', () => {
       const filePath = path.join(__dirname, '../examples/fibonacci.py');
-      expect(() => {
+      const expectedOutput = runPythonFile(filePath);
+      const actualOutput = runCompilerWithOutput(() => {
         compiler.runFile(filePath);
-      }).not.toThrow();
+      });
+      expect(actualOutput).toBe(expectedOutput);
     });
   });
 
@@ -106,9 +172,11 @@ x = 10
 if x > 0:
     print("positive")
 `;
-      expect(() => {
+      const expectedOutput = runPython(code);
+      const actualOutput = runCompilerWithOutput(() => {
         compiler.run(code);
-      }).not.toThrow();
+      });
+      expect(actualOutput).toBe(expectedOutput);
     });
 
     it('should handle if-elif-else statement', () => {
@@ -121,16 +189,20 @@ elif x < 0:
 else:
     print("zero")
 `;
-      expect(() => {
+      const expectedOutput = runPython(code);
+      const actualOutput = runCompilerWithOutput(() => {
         compiler.run(code);
-      }).not.toThrow();
+      });
+      expect(actualOutput).toBe(expectedOutput);
     });
 
     it('should run conditions.py example', () => {
       const filePath = path.join(__dirname, '../examples/conditions.py');
-      expect(() => {
+      const expectedOutput = runPythonFile(filePath);
+      const actualOutput = runCompilerWithOutput(() => {
         compiler.runFile(filePath);
-      }).not.toThrow();
+      });
+      expect(actualOutput).toBe(expectedOutput);
     });
   });
 
@@ -140,9 +212,11 @@ else:
 for i in range(5):
     print(i)
 `;
-      expect(() => {
+      const expectedOutput = runPython(code);
+      const actualOutput = runCompilerWithOutput(() => {
         compiler.run(code);
-      }).not.toThrow();
+      });
+      expect(actualOutput).toBe(expectedOutput);
     });
 
     it('should handle while loop', () => {
@@ -152,9 +226,11 @@ while count < 5:
     print(count)
     count += 1
 `;
-      expect(() => {
+      const expectedOutput = runPython(code);
+      const actualOutput = runCompilerWithOutput(() => {
         compiler.run(code);
-      }).not.toThrow();
+      });
+      expect(actualOutput).toBe(expectedOutput);
     });
 
     it('should handle list iteration', () => {
@@ -163,16 +239,20 @@ numbers = [1, 2, 3, 4, 5]
 for num in numbers:
     print(num)
 `;
-      expect(() => {
+      const expectedOutput = runPython(code);
+      const actualOutput = runCompilerWithOutput(() => {
         compiler.run(code);
-      }).not.toThrow();
+      });
+      expect(actualOutput).toBe(expectedOutput);
     });
 
     it('should run loops.py example', () => {
       const filePath = path.join(__dirname, '../examples/loops.py');
-      expect(() => {
+      const expectedOutput = runPythonFile(filePath);
+      const actualOutput = runCompilerWithOutput(() => {
         compiler.runFile(filePath);
-      }).not.toThrow();
+      });
+      expect(actualOutput).toBe(expectedOutput);
     });
   });
 
