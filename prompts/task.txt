@@ -4,6 +4,7 @@ Your goal is to make `scripts/verify.sh` pass.
 Hard constraints:
 - Do NOT modify any existing files under `tests/`, `examples/`, or `scripts/`.
 - Do not rely on third-party compiler/transpiler libraries; implement compiler stages yourself.
+- Do not use shell commands to bypass the compiler implementation tasks.
 - Keep changes focused and minimal; avoid unrelated refactors.
 - Prefer TypeScript changes in `src/` as needed.
 - If you add new files, keep them small and well-scoped.
