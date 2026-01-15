@@ -59,13 +59,15 @@ describe('PythonCompiler - Public API Tests', () => {
       .filter((file) => file.endsWith('.py'))
       .sort();
 
-    it.each(exampleFiles)('should match output for %s', (fileName) => {
-      const filePath = path.join(examplesDir, fileName);
-      const expectedOutput = runPythonFile(filePath);
-      const actualOutput = captureOutput(() => {
-        compiler.runFile(filePath);
-      });
-      expect(actualOutput).toBe(expectedOutput);
+    it('should match output for example files', () => {
+      for (const fileName of exampleFiles) {
+        const filePath = path.join(examplesDir, fileName);
+        const expectedOutput = runPythonFile(filePath);
+        const actualOutput = captureOutput(() => {
+          compiler.runFile(filePath);
+        });
+        expect(actualOutput).toBe(expectedOutput);
+      }
     });
   });
 });
