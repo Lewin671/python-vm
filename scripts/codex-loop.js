@@ -11,7 +11,7 @@ function parseArgs(argv) {
     promptPath: "prompts/task.txt",
     commitPromptPath: "prompts/commit.txt",
     taskCmd: "codex -a never --sandbox workspace-write exec",
-    commitCmd: "codex -a never --sandbox workspace-write exec",
+    commitCmd: "codex -a never --sandbox workspace-write --add-dir .git exec",
     testCmd: "npm test",
   };
 
@@ -52,7 +52,7 @@ function usage() {
     "  --prompt <path>     Prompt file path (default prompts/task.txt)",
     "  --task-cmd <cmd>    Codex task command (default \"codex -a never --sandbox workspace-write exec\")",
     "  --commit-prompt <path>  Commit prompt file (default prompts/commit.txt)",
-    "  --commit-cmd <cmd>  Codex commit command (default \"codex -a never --sandbox workspace-write exec\")",
+    "  --commit-cmd <cmd>  Codex commit command (default \"codex -a never --sandbox workspace-write --add-dir .git exec\")",
     "  --test-cmd <cmd>    Test command (default \"npm test\")",
   ].join("\n");
 }
