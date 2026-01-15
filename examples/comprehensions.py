@@ -21,7 +21,7 @@ print("Character count:", char_count)
 
 # 集合推导式
 unique_chars = {char for char in "programming"}
-print("Unique chars:", unique_chars)
+print("Unique chars:", sorted(unique_chars))
 
 # 生成器表达式
 gen = (x**2 for x in range(5))
