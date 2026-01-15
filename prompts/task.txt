@@ -1,10 +1,14 @@
 You are working in this repository to implement a Python compiler in TypeScript.
-Your goal is to make `scripts/verify.sh` pass.
+Your goal is to make `scripts/verify.sh` pass by implementing the compiler using proper compiler principles (parsing, analysis, transformation, codegen as appropriate), not shortcuts.
 
 Hard constraints:
 - Do NOT modify any existing files under `tests/`, `examples/`, or `scripts/`.
 - Do not rely on third-party compiler/transpiler libraries; implement compiler stages yourself.
-- Do not use shell commands to bypass the compiler implementation tasks.
+- Do not use shell commands, environment tricks, or config tweaks to bypass the compiler implementation tasks.
+- Do not stub, mock, or hardcode outputs to make tests pass without real compiler behavior.
+- Do not skip or short-circuit required logic (e.g., early returns that avoid work).
+- Do not disable, skip, or relax tests/verification (no test filters, no timeouts-as-passing).
+- Do not change tooling or build setup to mask failures (no rewriting scripts or test runners).
 - Keep changes focused and minimal; avoid unrelated refactors.
 - Prefer TypeScript changes in `src/` as needed.
 - If you add new files, keep them small and well-scoped.
