@@ -307,8 +307,15 @@ const isTruthy = (value: any): boolean => {
 
 const isPyNone = (value: any) => value === null;
 
+const isIntObject = (value: any): boolean => value instanceof Number && (value as any).__int__ === true;
+const isFloatObject = (value: any): boolean => value instanceof Number && !isIntObject(value);
+const isIntLike = (value: any): boolean => typeof value === 'number' || isIntObject(value);
+const isNumericLike = (value: any): boolean => typeof value === 'number' || value instanceof Number;
+const numValue = (value: any) => (value instanceof Number ? value.valueOf() : value);
+
 const pyTypeName = (value: any): string => {
   if (value === null) return 'NoneType';
+  if (isIntObject(value)) return 'int';
   if (value instanceof Number) return 'float';
   if (typeof value === 'boolean') return 'bool';
   if (typeof value === 'number') return Number.isInteger(value) ? 'int' : 'float';
@@ -329,6 +336,7 @@ const pyRepr = (value: any): string => {
     if (Number.isNaN(num)) return 'nan';
     if (num === Infinity) return 'inf';
     if (num === -Infinity) return '-inf';
+    if (isIntObject(value)) return String(num);
     return Number.isInteger(num) ? `${num}.0` : String(num);
   }
   if (typeof value === 'boolean') return value ? 'True' : 'False';
@@ -373,12 +381,10 @@ const isComplex = (value: any) => value && value.__complex__;
 
 const toComplex = (value: any) => {
   if (isComplex(value)) return value;
-  if (typeof value === 'number') return { __complex__: true, re: value, im: 0 };
+  if (isNumericLike(value)) return { __complex__: true, re: numValue(value), im: 0 };
   return { __complex__: true, re: 0, im: 0 };
 };
 
-const isFloatObject = (value: any) => value instanceof Number;
-const numValue = (value: any) => (value instanceof Number ? value.valueOf() : value);
 const pythonModulo = (left: any, right: any) => {
   const leftNum = numValue(left);
   const rightNum = numValue(right);
@@ -502,7 +508,9 @@ export class VirtualMachine {
     const intFn = (value: any) => {
       const result = parseInt(value, 10);
       if (Number.isNaN(result)) throw new PyException('ValueError', 'Invalid integer');
-      return result;
+      const boxed = new Number(result);
+      (boxed as any).__int__ = true;
+      return boxed;
     };
     (intFn as any).__typeName__ = 'int';
     builtins.set('int', intFn);
@@ -562,8 +570,8 @@ export class VirtualMachine {
     });
     builtins.set('sorted', (iterable: any) => {
       const arr = Array.isArray(iterable) ? [...iterable] : Array.from(iterable);
-      if (arr.every((v) => typeof v === 'number')) {
-        return arr.sort((a, b) => a - b);
+      if (arr.every((v) => isNumericLike(v))) {
+        return arr.sort((a, b) => numValue(a) - numValue(b));
       }
       return arr.sort();
     });
@@ -1442,14 +1450,14 @@ export class VirtualMachine {
     if (!spec) return pyStr(value);
     if (spec.endsWith('%')) {
       const digits = spec.includes('.') ? parseInt(spec.split('.')[1], 10) : 0;
-      const num = typeof value === 'number' ? value : parseFloat(value);
+      const num = isNumericLike(value) ? numValue(value) : parseFloat(value);
       return (num * 100).toFixed(digits) + '%';
     }
     if (spec.includes('.')) {
       const parts = spec.split('.');
       const width = parts[0];
       const precision = parseInt(parts[1].replace(/[^\d]/g, ''), 10);
-      const num = typeof value === 'number' ? value : parseFloat(value);
+      const num = isNumericLike(value) ? numValue(value) : parseFloat(value);
       const formatted = num.toFixed(precision);
       return this.applyWidth(formatted, width);
     }
@@ -1490,9 +1498,22 @@ export class VirtualMachine {
   }
 
   private contains(container: any, value: any): boolean {
-    if (Array.isArray(container)) return container.includes(value);
+    if (Array.isArray(container)) {
+      if (isNumericLike(value)) {
+        return container.some((item) => isNumericLike(item) && numValue(item) === numValue(value));
+      }
+      return container.includes(value);
+    }
     if (typeof container === 'string') return container.includes(value);
-    if (container instanceof Set) return container.has(value);
+    if (container instanceof Set) {
+      if (container.has(value)) return true;
+      if (isNumericLike(value)) {
+        for (const item of container.values()) {
+          if (isNumericLike(item) && numValue(item) === numValue(value)) return true;
+        }
+      }
+      return false;
+    }
     if (container instanceof PyDict) return container.has(value);
     return false;
   }
@@ -1540,23 +1561,26 @@ export class VirtualMachine {
         }
         return left - right;
       case '*':
-        if (typeof left === 'string' && typeof right === 'number') {
-          if (right <= 0) return '';
-          return left.repeat(right);
+        if (typeof left === 'string' && isIntLike(right)) {
+          const count = numValue(right);
+          if (count <= 0) return '';
+          return left.repeat(count);
         }
-        if (typeof right === 'string' && typeof left === 'number') {
-          if (left <= 0) return '';
-          return right.repeat(left);
+        if (typeof right === 'string' && isIntLike(left)) {
+          const count = numValue(left);
+          if (count <= 0) return '';
+          return right.repeat(count);
         }
-        if (Array.isArray(left) && typeof right === 'number') {
-          if (right <= 0) {
+        if (Array.isArray(left) && isIntLike(right)) {
+          const count = numValue(right);
+          if (count <= 0) {
             const result: any[] = [];
             if ((left as any).__tuple__) {
               (result as any).__tuple__ = true;
             }
             return result;
           }
-          const result = Array(right).fill(null).flatMap(() => left);
+          const result = Array(count).fill(null).flatMap(() => left);
           if ((left as any).__tuple__) {
             (result as any).__tuple__ = true;
           }
@@ -1654,8 +1678,8 @@ export class VirtualMachine {
     }
     if (Array.isArray(obj) || typeof obj === 'string') {
       let idx = index;
-      if (typeof idx === 'number' && idx < 0) {
-        idx = obj.length + idx;
+      if (isIntLike(idx) && numValue(idx) < 0) {
+        idx = obj.length + numValue(idx);
       }
       return obj[idx];
     }
