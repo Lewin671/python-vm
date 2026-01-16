@@ -147,6 +147,99 @@ class PyGenerator {
   }
 }
 
+type DictEntry = { key: any; value: any };
+
+class PyDict {
+  private primitiveStore: Map<string, DictEntry> = new Map();
+  private objectStore: Map<any, DictEntry> = new Map();
+
+  get size(): number {
+    return this.primitiveStore.size + this.objectStore.size;
+  }
+
+  set(key: any, value: any): this {
+    const info = this.keyInfo(key);
+    const existing = info.store.get(info.id);
+    if (existing) {
+      existing.value = value;
+      return this;
+    }
+    info.store.set(info.id, { key, value });
+    return this;
+  }
+
+  get(key: any): any {
+    const info = this.keyInfo(key);
+    const entry = info.store.get(info.id);
+    return entry ? entry.value : undefined;
+  }
+
+  has(key: any): boolean {
+    const info = this.keyInfo(key);
+    return info.store.has(info.id);
+  }
+
+  delete(key: any): boolean {
+    const info = this.keyInfo(key);
+    return info.store.delete(info.id);
+  }
+
+  *entries(): IterableIterator<[any, any]> {
+    for (const entry of this.primitiveStore.values()) {
+      yield [entry.key, entry.value];
+    }
+    for (const entry of this.objectStore.values()) {
+      yield [entry.key, entry.value];
+    }
+  }
+
+  *keys(): IterableIterator<any> {
+    for (const entry of this.primitiveStore.values()) {
+      yield entry.key;
+    }
+    for (const entry of this.objectStore.values()) {
+      yield entry.key;
+    }
+  }
+
+  *values(): IterableIterator<any> {
+    for (const entry of this.primitiveStore.values()) {
+      yield entry.value;
+    }
+    for (const entry of this.objectStore.values()) {
+      yield entry.value;
+    }
+  }
+
+  [Symbol.iterator](): IterableIterator<[any, any]> {
+    return this.entries();
+  }
+
+  private keyInfo(key: any): { store: Map<any, DictEntry>; id: any } {
+    const numeric = this.normalizeNumericKey(key);
+    if (numeric !== null) {
+      return { store: this.primitiveStore, id: `n:${String(numeric)}` };
+    }
+    if (typeof key === 'string') {
+      return { store: this.primitiveStore, id: `s:${key}` };
+    }
+    if (key === null) {
+      return { store: this.primitiveStore, id: 'none' };
+    }
+    if (key === undefined) {
+      return { store: this.primitiveStore, id: 'undefined' };
+    }
+    return { store: this.objectStore, id: key };
+  }
+
+  private normalizeNumericKey(key: any): number | null {
+    if (typeof key === 'boolean') return key ? 1 : 0;
+    if (typeof key === 'number') return key;
+    if (key instanceof Number) return key.valueOf();
+    return null;
+  }
+}
+
 class PyFile {
   path: string;
   mode: string;
@@ -207,7 +300,7 @@ const isTruthy = (value: any): boolean => {
   if (typeof value === 'number') return value !== 0;
   if (typeof value === 'string') return value.length > 0;
   if (Array.isArray(value)) return value.length > 0;
-  if (value instanceof Map) return value.size > 0;
+  if (value instanceof PyDict) return value.size > 0;
   if (value instanceof Set) return value.size > 0;
   return true;
 };
@@ -222,7 +315,7 @@ const pyTypeName = (value: any): string => {
   if (typeof value === 'string') return 'str';
   if (Array.isArray(value)) return (value as any).__tuple__ ? 'tuple' : 'list';
   if (value instanceof Set) return 'set';
-  if (value instanceof Map) return 'dict';
+  if (value instanceof PyDict) return 'dict';
   if (value instanceof PyFunction) return 'function';
   if (value instanceof PyClass) return 'type';
   if (value instanceof PyInstance) return value.klass.name;
@@ -233,6 +326,9 @@ const pyRepr = (value: any): string => {
   if (value === null) return 'None';
   if (value instanceof Number) {
     const num = value.valueOf();
+    if (Number.isNaN(num)) return 'nan';
+    if (num === Infinity) return 'inf';
+    if (num === -Infinity) return '-inf';
     return Number.isInteger(num) ? `${num}.0` : String(num);
   }
   if (typeof value === 'boolean') return value ? 'True' : 'False';
@@ -255,7 +351,7 @@ const pyRepr = (value: any): string => {
     const items = Array.from(value.values()).map((v) => pyRepr(v)).join(', ');
     return `{${items}}`;
   }
-  if (value instanceof Map) {
+  if (value instanceof PyDict) {
     const items = Array.from(value.entries()).map(([k, v]) => `${pyRepr(k)}: ${pyRepr(v)}`).join(', ');
     return `{${items}}`;
   }
@@ -334,7 +430,7 @@ export class VirtualMachine {
     });
     builtins.set('len', (value: any) => {
       if (typeof value === 'string' || Array.isArray(value)) return value.length;
-      if (value instanceof Map || value instanceof Set) return value.size;
+      if (value instanceof PyDict || value instanceof Set) return value.size;
       throw new PyException('TypeError', 'object has no len()');
     });
     builtins.set('range', (...args: any[]) => {
@@ -399,7 +495,22 @@ export class VirtualMachine {
     };
     (intFn as any).__typeName__ = 'int';
     builtins.set('int', intFn);
-    const floatFn = (value: any) => {
+    const floatFn = (value?: any) => {
+      if (value === undefined) return new Number(0);
+      if (value instanceof Number) return new Number(value.valueOf());
+      if (typeof value === 'number') return new Number(value);
+      if (typeof value === 'boolean') return new Number(value ? 1 : 0);
+      if (typeof value === 'string') {
+        const text = value.trim();
+        if (text.length === 0) throw new PyException('ValueError', 'Invalid float');
+        const lower = text.toLowerCase();
+        if (lower === 'nan' || lower === '+nan' || lower === '-nan') return new Number(NaN);
+        if (lower === 'inf' || lower === '+inf' || lower === 'infinity' || lower === '+infinity') return new Number(Infinity);
+        if (lower === '-inf' || lower === '-infinity') return new Number(-Infinity);
+        const result = parseFloat(text);
+        if (Number.isNaN(result)) throw new PyException('ValueError', 'Invalid float');
+        return new Number(result);
+      }
       const result = parseFloat(value);
       if (Number.isNaN(result)) throw new PyException('ValueError', 'Invalid float');
       return new Number(result);
@@ -502,7 +613,7 @@ export class VirtualMachine {
   }
 
   private iterableToArray(iterable: any): any[] {
-    if (iterable instanceof Map) return Array.from(iterable.keys());
+    if (iterable instanceof PyDict) return Array.from(iterable.keys());
     if (iterable instanceof Set) return Array.from(iterable.values());
     if (Array.isArray(iterable)) return iterable;
     if (iterable && typeof iterable[Symbol.iterator] === 'function') return Array.from(iterable);
@@ -897,7 +1008,7 @@ export class VirtualMachine {
         }
         return;
       }
-      if (obj instanceof Map) {
+      if (obj instanceof PyDict) {
         obj.set(index, value);
         return;
       }
@@ -938,7 +1049,7 @@ export class VirtualMachine {
         }
         return;
       }
-      if (obj instanceof Map) {
+      if (obj instanceof PyDict) {
         obj.delete(index);
         return;
       }
@@ -1003,14 +1114,14 @@ export class VirtualMachine {
       case ASTNodeType.SET_LITERAL:
         return new Set(node.elements.map((el: any) => this.evaluateExpression(el, scope)));
       case ASTNodeType.DICT_LITERAL: {
-        const map = new Map();
+        const map = new PyDict();
         for (const entry of node.entries) {
           map.set(this.evaluateExpression(entry.key, scope), this.evaluateExpression(entry.value, scope));
         }
         return map;
       }
       case ASTNodeType.DICT_COMP: {
-        const map = new Map();
+        const map = new PyDict();
         const compScope = new Scope(scope);
         this.evaluateComprehension(node.comprehension, compScope, () => {
           map.set(this.evaluateExpression(node.key, compScope), this.evaluateExpression(node.value, compScope));
@@ -1061,24 +1172,50 @@ export class VirtualMachine {
           const op = node.ops[i];
           const right = this.evaluateExpression(node.comparators[i], scope);
           let result = false;
+          const leftNum = left instanceof Number ? left.valueOf() : typeof left === 'number' ? left : null;
+          const rightNum = right instanceof Number ? right.valueOf() : typeof right === 'number' ? right : null;
           switch (op) {
             case '==':
-              result = left === right;
+              if (leftNum !== null && rightNum !== null) {
+                result = !Number.isNaN(leftNum) && !Number.isNaN(rightNum) && leftNum === rightNum;
+              } else {
+                result = left === right;
+              }
               break;
             case '!=':
-              result = left !== right;
+              if (leftNum !== null && rightNum !== null) {
+                result = Number.isNaN(leftNum) || Number.isNaN(rightNum) || leftNum !== rightNum;
+              } else {
+                result = left !== right;
+              }
               break;
             case '<':
-              result = left < right;
+              if (leftNum !== null && rightNum !== null) {
+                result = !Number.isNaN(leftNum) && !Number.isNaN(rightNum) && leftNum < rightNum;
+              } else {
+                result = left < right;
+              }
               break;
             case '>':
-              result = left > right;
+              if (leftNum !== null && rightNum !== null) {
+                result = !Number.isNaN(leftNum) && !Number.isNaN(rightNum) && leftNum > rightNum;
+              } else {
+                result = left > right;
+              }
               break;
             case '<=':
-              result = left <= right;
+              if (leftNum !== null && rightNum !== null) {
+                result = !Number.isNaN(leftNum) && !Number.isNaN(rightNum) && leftNum <= rightNum;
+              } else {
+                result = left <= right;
+              }
               break;
             case '>=':
-              result = left >= right;
+              if (leftNum !== null && rightNum !== null) {
+                result = !Number.isNaN(leftNum) && !Number.isNaN(rightNum) && leftNum >= rightNum;
+              } else {
+                result = left >= right;
+              }
               break;
             case 'in':
               result = this.contains(right, left);
@@ -1228,7 +1365,7 @@ export class VirtualMachine {
     if (Array.isArray(container)) return container.includes(value);
     if (typeof container === 'string') return container.includes(value);
     if (container instanceof Set) return container.has(value);
-    if (container instanceof Map) return container.has(value);
+    if (container instanceof PyDict) return container.has(value);
     return false;
   }
 
@@ -1381,7 +1518,7 @@ export class VirtualMachine {
       }
       return obj[idx];
     }
-    if (obj instanceof Map) {
+    if (obj instanceof PyDict) {
       return obj.get(index);
     }
     return null;
@@ -1449,7 +1586,7 @@ export class VirtualMachine {
       if (name === 'count') return (value: any) => obj.filter((item: any) => item === value).length;
       if (name === 'index') return (value: any) => obj.indexOf(value);
     }
-    if (obj instanceof Map) {
+    if (obj instanceof PyDict) {
       if (name === 'items') return () => Array.from(obj.entries()).map(([k, v]) => {
         const tup = [k, v];
         (tup as any).__tuple__ = true;
@@ -1515,7 +1652,11 @@ export class VirtualMachine {
           callScope.set(param.name, varArgs);
           args = [];
         } else if (param.type === 'KwArg') {
-          callScope.set(param.name, new Map(Object.entries(kwargs)));
+          const kwDict = new PyDict();
+          for (const [key, value] of Object.entries(kwargs)) {
+            kwDict.set(key, value);
+          }
+          callScope.set(param.name, kwDict);
           kwargs = {};
         }
       }

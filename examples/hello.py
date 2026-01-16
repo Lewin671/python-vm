@@ -1,2 +1,3 @@
-# Hello World 示例
-print("Hello, World!")
+d = {True: "a", 1: "b"}
+print(len(d))
+print(d[True], d[1])
