@@ -1529,9 +1529,22 @@ export class VirtualMachine {
         }
         return left - right;
       case '*':
-        if (typeof left === 'string' && typeof right === 'number') return left.repeat(right);
-        if (typeof right === 'string' && typeof left === 'number') return right.repeat(left);
+        if (typeof left === 'string' && typeof right === 'number') {
+          if (right <= 0) return '';
+          return left.repeat(right);
+        }
+        if (typeof right === 'string' && typeof left === 'number') {
+          if (left <= 0) return '';
+          return right.repeat(left);
+        }
         if (Array.isArray(left) && typeof right === 'number') {
+          if (right <= 0) {
+            const result: any[] = [];
+            if ((left as any).__tuple__) {
+              (result as any).__tuple__ = true;
+            }
+            return result;
+          }
           const result = Array(right).fill(null).flatMap(() => left);
           if ((left as any).__tuple__) {
             (result as any).__tuple__ = true;
