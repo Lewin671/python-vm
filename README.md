@@ -62,10 +62,10 @@ node dist/index.js examples/hello.py
 
 ### Use in TypeScript
 
-After `npm run build`, you can call the compiler from TypeScript:
+After `npm run build`, you can call the compiler from TypeScript. When consuming the package, import from `python-compiler-ts`. For local development in this repo, import from `./dist` instead.
 
 ```ts
-import { PythonCompiler } from './dist';
+import { PythonCompiler } from 'python-compiler-ts';
 
 const compiler = new PythonCompiler();
 const result = compiler.run('print("Hello from TypeScript")');
