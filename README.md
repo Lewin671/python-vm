@@ -2,8 +2,7 @@
 
 A Python compiler and interpreter implemented in TypeScript. The compiler currently packages the AST into a bytecode container that the VM executes.
 
-[简体中文](README_zh-CN.md)
-
+[简体中文](https://github.com/Lewin671/python-compiler-ts/blob/main/README_zh-CN.md) 
 ## Features
 
 - [x] CLI entry point for running `.py` files
