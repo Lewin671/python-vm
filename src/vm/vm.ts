@@ -981,8 +981,9 @@ export class VirtualMachine {
         return node.elements.map((el: any) => this.evaluateExpression(el, scope));
       case ASTNodeType.LIST_COMP: {
         const result: any[] = [];
-        this.evaluateComprehension(node.comprehension, scope, () => {
-          result.push(this.evaluateExpression(node.expression, scope));
+        const compScope = new Scope(scope);
+        this.evaluateComprehension(node.comprehension, compScope, () => {
+          result.push(this.evaluateExpression(node.expression, compScope));
         });
         return result;
       }
@@ -993,8 +994,9 @@ export class VirtualMachine {
       }
       case ASTNodeType.SET_COMP: {
         const result = new Set<any>();
-        this.evaluateComprehension(node.comprehension, scope, () => {
-          result.add(this.evaluateExpression(node.expression, scope));
+        const compScope = new Scope(scope);
+        this.evaluateComprehension(node.comprehension, compScope, () => {
+          result.add(this.evaluateExpression(node.expression, compScope));
         });
         return result;
       }
@@ -1009,15 +1011,19 @@ export class VirtualMachine {
       }
       case ASTNodeType.DICT_COMP: {
         const map = new Map();
-        this.evaluateComprehension(node.comprehension, scope, () => {
-          map.set(this.evaluateExpression(node.key, scope), this.evaluateExpression(node.value, scope));
+        const compScope = new Scope(scope);
+        this.evaluateComprehension(node.comprehension, compScope, () => {
+          map.set(this.evaluateExpression(node.key, compScope), this.evaluateExpression(node.value, compScope));
         });
         return map;
       }
       case ASTNodeType.GENERATOR_EXPR: {
         const self = this;
+        const compScope = new Scope(scope);
         const iterator = function* () {
-          yield* self.generateComprehension(node.comprehension, scope, () => self.evaluateExpression(node.expression, scope));
+          yield* self.generateComprehension(node.comprehension, compScope, () =>
+            self.evaluateExpression(node.expression, compScope)
+          );
         };
         return new PyGenerator(iterator());
       }
