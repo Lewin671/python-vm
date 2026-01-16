@@ -1,25 +1,24 @@
-# compiler-killer: match-case parse failure
+# compiler-killer: match-case parsing/execution
 
 - Date: 2026-01-16
 - Stage: test
-- Status: open
+- Status: resolved
 
 ## Problem / Symptom
 
-Adding a Python 3.10 match-case example causes the TypeScript parser to throw `Unexpected token in expression: :` during tests.
+`compiler_killer_match.py` failed to parse with `Unexpected token in expression: :` because `match`/`case` syntax was unsupported.
 
 ## Impact / Risk
 
-Any source using structural pattern matching cannot be parsed or executed by the TypeScript compiler, blocking real-world Python 3.10+ code.
+Example suite failed; match-case examples could not run, blocking verification.
 
 ## Current Understanding
 
-The new example `examples/compiler_killer_match.py` triggers a parse error in `parseAtom` when the test harness runs all example files.
+Added match-case support in lexer, parser, and VM with pattern handling for literals, captures, wildcards, list sequences, and OR patterns. Match executes first matching case, with optional guards evaluated using temporary bindings.
 
 ## Next Steps
 
-- Decide whether to implement match-case parsing or explicitly reject it with a clearer error message.
-- Add or update feature-support documentation to mark match-case as unsupported (if intentional).
+None.
 
 ## Evidence (optional)
-- Tests: `npm test` fails in `tests/compiler.test.ts` with `Unexpected token in expression: :`.
+- Tests: `./scripts/verify.sh`

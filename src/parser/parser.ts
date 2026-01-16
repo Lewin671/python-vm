@@ -157,6 +157,47 @@ export class Parser {
       return start as ASTNode;
     };
 
+    const parsePatternAtom = (): ASTNode => {
+      if (match(TokenType.NUMBER) || match(TokenType.STRING) || match(TokenType.BOOLEAN) || match(TokenType.NONE)) {
+        return { type: ASTNodeType.MATCH_PATTERN_VALUE, value: parseLiteral() };
+      }
+      if (match(TokenType.IDENTIFIER)) {
+        const name = consume().value;
+        if (name === '_') {
+          return { type: ASTNodeType.MATCH_PATTERN_WILDCARD };
+        }
+        return { type: ASTNodeType.MATCH_PATTERN_CAPTURE, name };
+      }
+      if (match(TokenType.LBRACKET)) {
+        consume();
+        const elements: ASTNode[] = [];
+        if (!match(TokenType.RBRACKET)) {
+          elements.push(parsePattern());
+          while (match(TokenType.COMMA)) {
+            consume();
+            if (match(TokenType.RBRACKET)) break;
+            elements.push(parsePattern());
+          }
+        }
+        expect(TokenType.RBRACKET);
+        return { type: ASTNodeType.MATCH_PATTERN_SEQUENCE, elements };
+      }
+      throw new Error(`Unexpected token in pattern: ${peek()?.value}`);
+    };
+
+    const parsePattern = (): ASTNode => {
+      let pattern = parsePatternAtom();
+      if (match(TokenType.OPERATOR, '|')) {
+        const patterns: ASTNode[] = [pattern];
+        while (match(TokenType.OPERATOR, '|')) {
+          consume();
+          patterns.push(parsePatternAtom());
+        }
+        pattern = { type: ASTNodeType.MATCH_PATTERN_OR, patterns };
+      }
+      return pattern;
+    };
+
     const parseAtom = (): ASTNode => {
       if (match(TokenType.NUMBER) || match(TokenType.STRING) || match(TokenType.BOOLEAN) || match(TokenType.NONE)) {
         return parseLiteral();
@@ -765,6 +806,30 @@ export class Parser {
       return { type: ASTNodeType.WITH_STATEMENT, items, body };
     };
 
+    const parseMatchStatement = (): ASTNode => {
+      expect(TokenType.KEYWORD, 'match');
+      const subject = parseExpression();
+      expect(TokenType.COLON);
+      expect(TokenType.NEWLINE);
+      expect(TokenType.INDENT);
+      const cases: ASTNode[] = [];
+      while (!match(TokenType.DEDENT) && !match(TokenType.EOF)) {
+        expect(TokenType.KEYWORD, 'case');
+        const pattern = parsePattern();
+        let guard: ASTNode | null = null;
+        if (match(TokenType.KEYWORD, 'if')) {
+          consume();
+          guard = parseExpression();
+        }
+        expect(TokenType.COLON);
+        const body = parseBlock();
+        cases.push({ type: ASTNodeType.MATCH_CASE, pattern, guard, body });
+        skipNewlines();
+      }
+      expect(TokenType.DEDENT);
+      return { type: ASTNodeType.MATCH_STATEMENT, subject, cases };
+    };
+
     const parseStatement = (): ASTNode => {
       skipNewlines();
       if (match(TokenType.AT)) {
@@ -780,6 +845,7 @@ export class Parser {
       if (match(TokenType.KEYWORD, 'while')) return parseWhileStatement();
       if (match(TokenType.KEYWORD, 'try')) return parseTryStatement();
       if (match(TokenType.KEYWORD, 'with')) return parseWithStatement();
+      if (match(TokenType.KEYWORD, 'match')) return parseMatchStatement();
       if (match(TokenType.KEYWORD, 'return')) {
         consume();
         const value = match(TokenType.NEWLINE) ? null : parseExpressionList();

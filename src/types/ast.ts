@@ -27,6 +27,13 @@ export enum ASTNodeType {
   GLOBAL_STATEMENT = 'GlobalStatement',
   NONLOCAL_STATEMENT = 'NonlocalStatement',
   DELETE_STATEMENT = 'DeleteStatement',
+  MATCH_STATEMENT = 'MatchStatement',
+  MATCH_CASE = 'MatchCase',
+  MATCH_PATTERN_VALUE = 'MatchPatternValue',
+  MATCH_PATTERN_CAPTURE = 'MatchPatternCapture',
+  MATCH_PATTERN_WILDCARD = 'MatchPatternWildcard',
+  MATCH_PATTERN_OR = 'MatchPatternOr',
+  MATCH_PATTERN_SEQUENCE = 'MatchPatternSequence',
 
   BINARY_OPERATION = 'BinaryOperation',
   UNARY_OPERATION = 'UnaryOperation',

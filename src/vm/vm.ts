@@ -620,6 +620,59 @@ export class VirtualMachine {
     return [];
   }
 
+  private matchValueEquals(left: any, right: any): boolean {
+    const leftNum = left instanceof Number ? left.valueOf() : typeof left === 'number' ? left : null;
+    const rightNum = right instanceof Number ? right.valueOf() : typeof right === 'number' ? right : null;
+    if (leftNum !== null && rightNum !== null) {
+      return !Number.isNaN(leftNum) && !Number.isNaN(rightNum) && leftNum === rightNum;
+    }
+    return left === right;
+  }
+
+  private matchPattern(node: any, value: any, scope: Scope): { matched: boolean; bindings: Map<string, any> } {
+    switch (node.type) {
+      case ASTNodeType.MATCH_PATTERN_WILDCARD:
+        return { matched: true, bindings: new Map() };
+      case ASTNodeType.MATCH_PATTERN_CAPTURE: {
+        const bindings = new Map<string, any>();
+        bindings.set(node.name, value);
+        return { matched: true, bindings };
+      }
+      case ASTNodeType.MATCH_PATTERN_VALUE: {
+        const expected = this.evaluateExpression(node.value, scope);
+        return { matched: this.matchValueEquals(value, expected), bindings: new Map() };
+      }
+      case ASTNodeType.MATCH_PATTERN_SEQUENCE: {
+        if (!Array.isArray(value)) return { matched: false, bindings: new Map() };
+        if (value.length !== node.elements.length) return { matched: false, bindings: new Map() };
+        const bindings = new Map<string, any>();
+        for (let i = 0; i < node.elements.length; i++) {
+          const result = this.matchPattern(node.elements[i], value[i], scope);
+          if (!result.matched) return { matched: false, bindings: new Map() };
+          for (const [key, val] of result.bindings.entries()) {
+            bindings.set(key, val);
+          }
+        }
+        return { matched: true, bindings };
+      }
+      case ASTNodeType.MATCH_PATTERN_OR: {
+        for (const pattern of node.patterns) {
+          const result = this.matchPattern(pattern, value, scope);
+          if (result.matched) return result;
+        }
+        return { matched: false, bindings: new Map() };
+      }
+      default:
+        throw new Error(`Unsupported match pattern: ${node.type}`);
+    }
+  }
+
+  private applyBindings(bindings: Map<string, any>, scope: Scope): void {
+    for (const [name, value] of bindings.entries()) {
+      scope.set(name, value);
+    }
+  }
+
   private *executeBlockGenerator(body: any[], scope: Scope): Generator<any, any, any> {
     for (const stmt of body) {
       yield* this.executeStatementGenerator(stmt, scope);
@@ -698,6 +751,27 @@ export class VirtualMachine {
             if (err instanceof ContinueSignal) continue;
             throw err;
           }
+        }
+        return null;
+      }
+      case ASTNodeType.MATCH_STATEMENT: {
+        const subject = this.expressionHasYield(node.subject)
+          ? yield* this.evaluateExpressionGenerator(node.subject, scope)
+          : this.evaluateExpression(node.subject, scope);
+        for (const matchCase of node.cases) {
+          const result = this.matchPattern(matchCase.pattern, subject, scope);
+          if (!result.matched) continue;
+          if (matchCase.guard) {
+            const guardScope = new Scope(scope);
+            this.applyBindings(result.bindings, guardScope);
+            const guardValue = this.expressionHasYield(matchCase.guard)
+              ? yield* this.evaluateExpressionGenerator(matchCase.guard, guardScope)
+              : this.evaluateExpression(matchCase.guard, guardScope);
+            if (!isTruthy(guardValue)) continue;
+          }
+          this.applyBindings(result.bindings, scope);
+          yield* this.executeBlockGenerator(matchCase.body, scope);
+          return null;
         }
         return null;
       }
@@ -839,6 +913,21 @@ export class VirtualMachine {
             if (err instanceof ContinueSignal) continue;
             throw err;
           }
+        }
+        return null;
+      }
+      case ASTNodeType.MATCH_STATEMENT: {
+        const subject = this.evaluateExpression(node.subject, scope);
+        for (const matchCase of node.cases) {
+          const result = this.matchPattern(matchCase.pattern, subject, scope);
+          if (!result.matched) continue;
+          if (matchCase.guard) {
+            const guardScope = new Scope(scope);
+            this.applyBindings(result.bindings, guardScope);
+            if (!isTruthy(this.evaluateExpression(matchCase.guard, guardScope))) continue;
+          }
+          this.applyBindings(result.bindings, scope);
+          return this.executeBlock(matchCase.body, scope);
         }
         return null;
       }
