@@ -4,14 +4,6 @@
 
 [English](README.md)
 
-## 技术栈
-
-- TypeScript 5.x
-- Node.js 18+
-- Vitest
-- ESLint
-- Prettier
-
 ## 功能特性
 
 - [x] CLI 入口，用于运行 `.py` 文件
@@ -20,7 +12,11 @@
 - [x] 字节码编译器框架，将 AST 交给虚拟机执行
 - [x] 基于 AST 的虚拟机，支持作用域、控制流、函数、类、生成器、上下文管理器与异常
 - [x] Python 数据结构支持：list、tuple、dict、set、切片与推导式
-- [x] 内置函数：\n+  - 类型/转换：int、float、str、bool、list、tuple、set、type、isinstance\n+  - 迭代相关：range、enumerate、zip、sorted、reversed、map、filter、next\n+  - 数值/工具：abs、round、sum、min、max\n+  - 输入输出：print、open
+- [x] 内置函数：
+  - 类型/转换：int、float、str、bool、list、tuple、set、type、isinstance
+  - 迭代相关：range、enumerate、zip、sorted、reversed、map、filter、next
+  - 数值/工具：abs、round、sum、min、max
+  - 输入输出：print、open
 - [x] 示例脚本与 Vitest 测试，输出对比系统 Python
 
 ## 快速开始
@@ -62,6 +58,17 @@ npm start -- examples/hello.py
 
 ```bash
 node dist/index.js examples/hello.py
+```
+
+### 在 TypeScript 中调用
+
+```ts
+import { PythonCompiler } from 'python-compiler-ts';
+
+const compiler = new PythonCompiler();
+const result = compiler.run('print("Hello from TypeScript")');
+
+console.log(result);
 ```
 
 ## 项目结构

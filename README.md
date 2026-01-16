@@ -4,14 +4,6 @@ A Python compiler and interpreter implemented in TypeScript. The compiler curren
 
 [简体中文](README_zh-CN.md)
 
-## Tech Stack
-
-- TypeScript 5.x
-- Node.js 18+
-- Vitest
-- ESLint
-- Prettier
-
 ## Features
 
 - [x] CLI entry point for running `.py` files
@@ -20,7 +12,11 @@ A Python compiler and interpreter implemented in TypeScript. The compiler curren
 - [x] Bytecode compiler scaffold that passes ASTs to the VM
 - [x] AST-based virtual machine with scopes, control flow, functions, classes, generators, context managers, and exceptions
 - [x] Python data structures including lists, tuples, dicts, sets, slicing, and comprehensions
-- [x] Built-ins:\n+  - Type/conversion: int, float, str, bool, list, tuple, set, type, isinstance\n+  - Iteration: range, enumerate, zip, sorted, reversed, map, filter, next\n+  - Math/util: abs, round, sum, min, max\n+  - I/O: print, open
+- [x] Built-ins:
+  - Type/conversion: int, float, str, bool, list, tuple, set, type, isinstance
+  - Iteration: range, enumerate, zip, sorted, reversed, map, filter, next
+  - Math/util: abs, round, sum, min, max
+  - I/O: print, open
 - [x] Example scripts and Vitest suite that compare output against system Python
 
 ## Getting Started
@@ -62,6 +58,17 @@ Or run directly:
 
 ```bash
 node dist/index.js examples/hello.py
+```
+
+### Use in TypeScript
+
+```ts
+import { PythonCompiler } from 'python-compiler-ts';
+
+const compiler = new PythonCompiler();
+const result = compiler.run('print("Hello from TypeScript")');
+
+console.log(result);
 ```
 
 ## Project Structure
