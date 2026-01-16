@@ -5,6 +5,7 @@ export interface ByteCode {
   instructions: Instruction[];
   constants: any[];
   names: string[];
+  ast?: any;
 }
 
 export interface Instruction {
