@@ -62,8 +62,10 @@ node dist/index.js examples/hello.py
 
 ### 在 TypeScript 中调用
 
+运行 `npm run build` 后，可以在 TypeScript 中这样调用：
+
 ```ts
-import { PythonCompiler } from 'python-compiler-ts';
+import { PythonCompiler } from './dist';
 
 const compiler = new PythonCompiler();
 const result = compiler.run('print("Hello from TypeScript")');
