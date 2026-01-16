@@ -2086,6 +2086,9 @@ export class VirtualMachine {
         (tup as any).__tuple__ = true;
         return tup;
       });
+      const value = (obj as any)[name];
+      if (typeof value === 'function') return value.bind(obj);
+      return value;
     }
     if (obj instanceof Set) {
       if (name === 'add') return (value: any) => obj.add(value);
