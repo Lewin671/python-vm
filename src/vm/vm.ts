@@ -1987,6 +1987,41 @@ export class VirtualMachine {
       if (name === 'append') return (value: any) => obj.push(value);
       if (name === 'count') return (value: any) => obj.filter((item: any) => item === value).length;
       if (name === 'index') return (value: any) => obj.indexOf(value);
+      if (name === 'sort') {
+        return (...args: any[]) => {
+          let kwargs: Record<string, any> = {};
+          if (args.length > 0) {
+            const last = args[args.length - 1];
+            if (last && last.__kwargs__) {
+              kwargs = last.__kwargs__;
+              args = args.slice(0, -1);
+            }
+          }
+          let keyFn = args.length > 0 ? args[0] : null;
+          if ('key' in kwargs) keyFn = kwargs.key;
+          const reverse = 'reverse' in kwargs ? Boolean(kwargs.reverse) : false;
+          if (keyFn) {
+            const keyed = obj.map((item: any) => ({
+              item,
+              key: this.callFunction(keyFn, [item], scope)
+            }));
+            keyed.sort((a, b) => {
+              if (isNumericLike(a.key) && isNumericLike(b.key)) {
+                return toNumber(a.key) - toNumber(b.key);
+              }
+              return String(a.key).localeCompare(String(b.key));
+            });
+            obj.length = 0;
+            obj.push(...keyed.map((entry) => entry.item));
+          } else if (obj.every((value: any) => isNumericLike(value))) {
+            obj.sort((a: any, b: any) => toNumber(a) - toNumber(b));
+          } else {
+            obj.sort();
+          }
+          if (reverse) obj.reverse();
+          return null;
+        };
+      }
     }
     if (obj instanceof PyDict) {
       if (name === 'items') return () => Array.from(obj.entries()).map(([k, v]) => {
@@ -2034,6 +2069,9 @@ export class VirtualMachine {
   }
 
   private callFunction(func: any, args: any[], scope: Scope, kwargs: Record<string, any> = {}): any {
+    if (!kwargs) {
+      kwargs = {};
+    }
     if (func instanceof PyFunction) {
       const callScope = new Scope(func.closure);
       for (const param of func.params) {
