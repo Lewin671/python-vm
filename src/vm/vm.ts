@@ -387,6 +387,7 @@ const pyRepr = (value: any): string => {
     if (num === Infinity) return 'inf';
     if (num === -Infinity) return '-inf';
     if (isIntObject(value)) return String(num);
+    if (Object.is(num, -0)) return '-0.0';
     return Number.isInteger(num) ? `${num}.0` : String(num);
   }
   if (typeof value === 'boolean') return value ? 'True' : 'False';
@@ -1455,6 +1456,12 @@ export class VirtualMachine {
           case '+':
             return typeof operand === 'bigint' ? operand : +operand;
           case '-':
+            if (isIntObject(operand)) {
+              const boxed = new Number(-operand.valueOf());
+              (boxed as any).__int__ = true;
+              return boxed;
+            }
+            if (isFloatObject(operand)) return new Number(-operand.valueOf());
             return -operand;
           case '~':
             return ~operand;
