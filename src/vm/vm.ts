@@ -379,6 +379,17 @@ const toComplex = (value: any) => {
 
 const isFloatObject = (value: any) => value instanceof Number;
 const numValue = (value: any) => (value instanceof Number ? value.valueOf() : value);
+const pythonModulo = (left: any, right: any) => {
+  const leftNum = numValue(left);
+  const rightNum = numValue(right);
+  if (rightNum === 0) throw new PyException('ZeroDivisionError', 'division by zero');
+  const quotient = Math.floor(leftNum / rightNum);
+  const result = leftNum - quotient * rightNum;
+  if (isFloatObject(left) || isFloatObject(right)) {
+    return new Number(result);
+  }
+  return result;
+};
 
 const parseStringToken = (tokenValue: string): { value: string; isFString: boolean } => {
   let raw = tokenValue;
@@ -1568,7 +1579,7 @@ export class VirtualMachine {
         if (typeof left === 'string') {
           return this.formatPercent(left, right);
         }
-        return left % right;
+        return pythonModulo(left, right);
       case '**':
         return Math.pow(left, right);
       case '&':
