@@ -1,92 +1,82 @@
 # @lewin671/python-vm
 
-A Python compiler and interpreter implemented in TypeScript. The compiler currently packages the AST into a bytecode container that the VM executes.
+[![License](https://img.shields.io/github/license/Lewin671/python-compiler-ts)](https://github.com/Lewin671/python-compiler-ts/blob/main/LICENSE)
+[![NPM Version](https://img.shields.io/npm/v/@lewin671/python-vm)](https://www.npmjs.com/package/@lewin671/python-vm)
 
-[简体中文](https://github.com/Lewin671/python-compiler-ts/blob/main/README_zh-CN.md) 
-## Features
+A high-performance Python compiler and Virtual Machine (VM) implemented entirely in TypeScript. This project aims to provide a robust, Python-compliant execution environment within the JavaScript ecosystem, featuring a complete compilation pipeline from source code to bytecode.
 
-- [x] CLI entry point for running `.py` files
-- [x] Lexer with indentation handling, numbers, strings (including f-strings), keywords, and operators
-- [x] Parser that builds ASTs for statements and expressions (functions, classes, loops, comprehensions, exceptions, and more)
-- [x] Bytecode compiler scaffold that passes ASTs to the VM
-- [x] AST-based virtual machine with scopes, control flow, functions, classes, generators, context managers, and exceptions
-- [x] Python data structures including lists, tuples, dicts, sets, slicing, and comprehensions
-- [x] Built-ins:
-  - Type/conversion: int, float, str, bool, list, tuple, set, type, isinstance
-  - Iteration: range, enumerate, zip, sorted, reversed, map, filter, next
-  - Math/util: abs, round, sum, min, max
-  - I/O: print, open
-- [x] Example scripts and Vitest suite that compare output against system Python
+[简体中文](README_zh-CN.md)
 
-## Getting Started
+## 🚀 Key Highlights
 
-### Requirements
+- **Advanced Compilation Pipeline**: Moves beyond simple interpretation by implementing a multi-stage pipeline: Source → Tokens → AST → Control Flow Graph (CFG) → Linear Bytecode → VM.
+- **Python-Strict Semantics**: Carefully implemented data structures (`PyDict`, `PySet`, `PyList`) that strictly follow Python's rules for equality, hashing, and numeric types (including BigInt for arbitrary-precision integers and NaN handling).
+- **Comprehensive Language Support**:
+  - **Core**: Full support for functions, classes, closures, and decorators.
+  - **Modern Features**: Includes `match` statements (Structural Pattern Matching), `with` statements (Context Managers), and `try/except/finally` blocks.
+  - **Control Flow**: Robust handling of generators (`yield`), list/dict/set comprehensions, and nested scopes (`global`, `nonlocal`).
+- **Production-Ready Tooling**: Includes a high-fidelity Lexer with indentation/dedentation logic, a recursive descent Parser, and a stack-based VM.
 
-- Node.js 18+
-- npm
-- Python 3 available on your PATH for tests (set `PYTHON=python3` if needed)
+## 🛠 Features
 
-### Install
+### Compiler & VM
+- [x] **Lexer**: Handles complex Python indentation, f-strings, and multi-line literals.
+- [x] **Parser**: Generates a typed AST supporting a wide subset of Python 3.10+ syntax.
+- [x] **CFG Builder**: Optimizes code structures into a Control Flow Graph before bytecode generation.
+- [x] **Bytecode Virtual Machine**: A stack-based execution engine with local/global scope management.
+- [x] **Exception System**: Full traceback support and Python-compliant exception hierarchy.
 
-```bash
-npm install
-```
+### Standard Library & Built-ins
+- **Data Types**: `int`, `float`, `str`, `bool`, `list`, `tuple`, `dict`, `set`, `None`.
+- **Iteration**: `range`, `enumerate`, `zip`, `reversed`, `map`, `filter`, `sorted`.
+- **Utilities**: `abs`, `round`, `sum`, `min`, `max`, `isinstance`, `type`, `print`, `open`, `next`.
 
-### Build
-
-```bash
-npm run build
-```
-
-### Test
+## 📦 Installation
 
 ```bash
-npm test
+npm install @lewin671/python-vm
 ```
 
-If the tests cannot find Python, set the environment variable before running them, for example: `export PYTHON=python3`.
+## 📖 Usage
 
-### Run
+### Running via CLI
+
+After cloning the repository, you can run Python files directly:
 
 ```bash
 npm run build
 npm start -- examples/hello.py
 ```
 
-Or run directly:
-
-```bash
-node dist/index.js examples/hello.py
-```
-
-### Use in TypeScript
-
-After `npm run build`, you can call the compiler from TypeScript. When consuming the package, import from `@lewin671/python-vm`. For local development in this repo, import from `./dist` instead.
+### Using in your TypeScript project
 
 ```ts
 import { PythonCompiler } from '@lewin671/python-vm';
 
 const compiler = new PythonCompiler();
-const result = compiler.run('print("Hello from TypeScript")');
 
-console.log(result);
+// Execute code directly
+const result = compiler.run(`
+def greet(name):
+    return f"Hello, {name}!"
+
+result = [greet(x) for x in ["World", "TypeScript"]]
+print(result)
+`);
+
+// Or run a file
+// compiler.runFile('./script.py');
 ```
 
-## Project Structure
+## 🧪 Testing and Correctness
 
+Correctness is a top priority. The project includes an extensive test suite using **Vitest** that compares the VM output against the system's CPython interpreter for parity.
+
+```bash
+# Run all tests (requires Python 3 installed locally)
+npm test
 ```
-@lewin671/python-vm/
-├── dist/                # Compiled output
-├── examples/            # Sample Python programs used by tests
-├── src/
-│   ├── compiler.ts      # Public PythonCompiler API
-│   ├── compiler_module/ # Bytecode compiler scaffold
-│   ├── index.ts         # CLI entry + exports
-│   ├── lexer/           # Tokenizer
-│   ├── parser/          # AST parser
-│   ├── types/           # Tokens, AST, bytecode types
-│   └── vm/              # AST interpreter (virtual machine)
-├── tests/               # Vitest suites comparing against CPython
-├── package.json
-└── tsconfig.json
-```
+
+## ⚖️ License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.

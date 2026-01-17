@@ -1,93 +1,82 @@
 # @lewin671/python-vm
 
-一个使用 TypeScript 实现的 Python 编译器与解释器。目前编译器会将 AST 打包到字节码容器中，由虚拟机执行。
+[![License](https://img.shields.io/github/license/Lewin671/python-compiler-ts)](https://github.com/Lewin671/python-compiler-ts/blob/main/LICENSE)
+[![NPM Version](https://img.shields.io/npm/v/@lewin671/python-vm)](https://www.npmjs.com/package/@lewin671/python-vm)
+
+一个完全使用 TypeScript 实现的高性能 Python 编译器与虚拟机 (VM)。本项目旨在为 JavaScript 生态提供一个鲁棒且符合 Python 语义的执行环境，包含从源码到字节码的完整编译流水线。
 
 [English](README.md)
 
-## 功能特性
+## 🚀 项目亮点
 
-- [x] CLI 入口，用于运行 `.py` 文件
-- [x] 具备缩进处理、数字/字符串（含 f-string）、关键字与运算符的词法分析器
-- [x] 语法分析器生成 AST，覆盖函数、类、循环、推导式、异常等语句与表达式
-- [x] 字节码编译器框架，将 AST 交给虚拟机执行
-- [x] 基于 AST 的虚拟机，支持作用域、控制流、函数、类、生成器、上下文管理器与异常
-- [x] Python 数据结构支持：list、tuple、dict、set、切片与推导式
-- [x] 内置函数：
-  - 类型/转换：int、float、str、bool、list、tuple、set、type、isinstance
-  - 迭代相关：range、enumerate、zip、sorted、reversed、map、filter、next
-  - 数值/工具：abs、round、sum、min、max
-  - 输入输出：print、open
-- [x] 示例脚本与 Vitest 测试，输出对比系统 Python
+- **先进的编译流水线**：超越简单的解释执行，实现了多阶段编译流程：源码 → Token 流 → AST (抽象语法树) → CFG (控制流图) → 线性字节码 → 虚拟机执行。
+- **严格的 Python 语义**：精心实现的数据结构（`PyDict`, `PySet`, `PyList`）严格遵循 Python 关于等值性、哈希计算以及数值类型的规则（支持大整数 BigInt 和完整的 NaN 处理逻辑）。
+- **全面的语言支持**：
+  - **核心语法**：完整支持函数、类、闭包及装饰器。
+  - **现代特性**：包括 `match` 语句（结构化模式匹配）、`with` 语句（上下文管理器）以及 `try/except/finally` 异常处理块。
+  - **控制流**：支持生成器 (`yield`)、列表/字典/集合推导式，以及复杂的嵌套作用域（`global`, `nonlocal`）。
+- **工程化实现**：配备了支持缩进逻辑的高精度词法分析器 (Lexer)、递归下降语法分析器 (Parser) 以及一个高效的基于栈的虚拟机 (VM)。
 
-## 快速开始
+## 🛠 功能特性
 
-### 环境要求
+### 编译器与虚拟机
+- [x] **词法分析器 (Lexer)**：处理复杂的 Python 缩进/反缩进、f-strings 以及多行字面量。
+- [x] **语法分析器 (Parser)**：生成的类型化 AST 覆盖了 Python 3.10+ 的绝大部分常用语法。
+- [x] **控制流图构建器 (CFG Builder)**：在生成字节码前优化代码结构。
+- [x] **字节码虚拟机**：支持局部/全局作用域管理、调用栈以及高效的指令集执行。
+- [x] **异常系统**：提供完整的 Traceback 支持和符合 Python 规范的异常层级。
 
-- Node.js 18+
-- npm
-- Python 3（运行测试需要，确保在 PATH 中；必要时设置 `PYTHON=python3`）
+### 标准库与内置函数
+- **数据类型**：`int` (任意精度), `float`, `str`, `bool`, `list`, `tuple`, `dict`, `set`, `None`。
+- **迭代工具**：`range`, `enumerate`, `zip`, `reversed`, `map`, `filter`, `sorted`。
+- **内置工具**：`abs`, `round`, `sum`, `min`, `max`, `isinstance`, `type`, `print`, `open`, `next`。
 
-### 安装依赖
-
-```bash
-npm install
-```
-
-### 构建
+## 📦 安装使用
 
 ```bash
-npm run build
+npm install @lewin671/python-vm
 ```
 
-### 测试
+## 📖 使用指南
 
-```bash
-npm test
-```
+### 通过命令行运行
 
-如果测试无法找到 Python，可先设置环境变量，例如：`export PYTHON=python3`。
-
-### 运行
+克隆仓库后，您可以直接运行 Python 文件：
 
 ```bash
 npm run build
 npm start -- examples/hello.py
 ```
 
-或直接运行：
-
-```bash
-node dist/index.js examples/hello.py
-```
-
-### 在 TypeScript 中调用
-
-运行 `npm run build` 后，可以在 TypeScript 中这样调用。作为依赖使用时请从 `@lewin671/python-vm` 导入，本仓库本地开发时则从 `./dist` 导入。
+### 在 TypeScript 项目中调用
 
 ```ts
 import { PythonCompiler } from '@lewin671/python-vm';
 
 const compiler = new PythonCompiler();
-const result = compiler.run('print("Hello from TypeScript")');
 
-console.log(result);
+// 直接执行代码
+const result = compiler.run(`
+def greet(name):
+    return f"Hello, {name}!"
+
+result = [greet(x) for x in ["World", "TypeScript"]]
+print(result)
+`);
+
+// 或者运行文件
+// compiler.runFile('./script.py');
 ```
 
-## 项目结构
+## 🧪 测试与正确性
 
+正确性是本项目的核心指标。我们使用 **Vitest** 构建了庞大的测试套件，通过将虚拟机的输出与系统原生的 CPython 解释器进行对比，确保执行结果的一致性。
+
+```bash
+# 运行所有测试（需要本地安装 Python 3）
+npm test
 ```
-@lewin671/python-vm/
-├── dist/                # 编译输出
-├── examples/            # 测试用 Python 示例
-├── src/
-│   ├── compiler.ts      # PythonCompiler 公共 API
-│   ├── compiler_module/ # 字节码编译器框架
-│   ├── index.ts         # CLI 入口 + 导出
-│   ├── lexer/           # 词法分析器
-│   ├── parser/          # 语法分析器
-│   ├── types/           # Token/AST/字节码类型
-│   └── vm/              # AST 解释执行器
-├── tests/               # 与 CPython 对比的 Vitest 测试
-├── package.json
-└── tsconfig.json
-```
+
+## ⚖️ 开源协议
+
+本项目基于 MIT 协议开源 - 详见 [LICENSE](LICENSE) 文件。
