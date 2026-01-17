@@ -149,43 +149,6 @@ print(fib(27))
   ));
 
   results.push(benchmark(
-    'Tail Recursion - Factorial(200)',
-    `
-def factorial_tail(n, acc=1):
-    if n <= 1:
-        return acc
-    return factorial_tail(n - 1, n * acc)
-
-# 返回布尔值而非大整数，避免输出性能差异
-print(factorial_tail(200) > 0)
-`
-  ));
-
-  results.push(benchmark(
-    'Tail Recursion - Counter(300)',
-    `
-def count_tail(n, acc=0):
-    if n <= 0:
-        return acc
-    return count_tail(n - 1, acc + 1)
-
-print(count_tail(300))
-`
-  ));
-
-  results.push(benchmark(
-    'Tail Recursion - Fibonacci(20)',
-    `
-def fib_tail(n, a=0, b=1):
-    if n == 0:
-        return a
-    return fib_tail(n - 1, b, a + b)
-
-print(fib_tail(20))
-`
-  ));
-
-  results.push(benchmark(
     'List Operations (200000)',
     `
 lst = []
