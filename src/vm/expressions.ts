@@ -55,7 +55,7 @@ export function evaluateExpression(this: VirtualMachine, node: any, scope: Scope
       const compScope = new Scope(scope);
       this.evaluateComprehension(node.comprehension, compScope, () => {
         result.push(this.evaluateExpression(node.expression, compScope));
-      });
+      }, scope);
       return result;
     }
     case ASTNodeType.TUPLE_LITERAL: {
@@ -68,7 +68,7 @@ export function evaluateExpression(this: VirtualMachine, node: any, scope: Scope
       const compScope = new Scope(scope);
       this.evaluateComprehension(node.comprehension, compScope, () => {
         result.add(this.evaluateExpression(node.expression, compScope));
-      });
+      }, scope);
       return result;
     }
     case ASTNodeType.SET_LITERAL:
@@ -85,14 +85,19 @@ export function evaluateExpression(this: VirtualMachine, node: any, scope: Scope
       const compScope = new Scope(scope);
       this.evaluateComprehension(node.comprehension, compScope, () => {
         map.set(this.evaluateExpression(node.key, compScope), this.evaluateExpression(node.value, compScope));
-      });
+      }, scope);
       return map;
     }
     case ASTNodeType.GENERATOR_EXPR: {
       const self = this;
       const compScope = new Scope(scope);
       const iterator = function* () {
-        yield* self.generateComprehension(node.comprehension, compScope, () => self.evaluateExpression(node.expression, compScope));
+        yield* self.generateComprehension(
+          node.comprehension,
+          compScope,
+          () => self.evaluateExpression(node.expression, compScope),
+          scope
+        );
       };
       return new PyGenerator(iterator());
     }

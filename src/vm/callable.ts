@@ -87,7 +87,7 @@ export function containsYield(this: VirtualMachine, body: any[]): boolean {
   return false;
 }
 
-export function evaluateComprehension(this: VirtualMachine, node: any, scope: Scope, emit: () => void) {
+export function evaluateComprehension(this: VirtualMachine, node: any, scope: Scope, emit: () => void, outerScope?: Scope) {
   const clauses = node.clauses || [];
   const walk = (index: number) => {
     if (index >= clauses.length) {
@@ -95,7 +95,8 @@ export function evaluateComprehension(this: VirtualMachine, node: any, scope: Sc
       return;
     }
     const clause = clauses[index];
-    const iterable = this.evaluateExpression(clause.iter, scope);
+    const iterScope = (index === 0 && outerScope) ? outerScope : scope;
+    const iterable = this.evaluateExpression(clause.iter, iterScope);
     const items = Array.isArray(iterable) ? iterable : Array.from(iterable);
     for (const item of items) {
       this.assignTarget(clause.target, item, scope);
@@ -112,7 +113,8 @@ export function* generateComprehension(
   this: VirtualMachine,
   node: any,
   scope: Scope,
-  valueFactory: () => any
+  valueFactory: () => any,
+  outerScope?: Scope
 ): Generator<any, any, any> {
   const clauses = node.clauses || [];
   const walk = (index: number): Generator<any, any, any> => {
@@ -123,7 +125,8 @@ export function* generateComprehension(
         return;
       }
       const clause = clauses[index];
-      const iterable = self.evaluateExpression(clause.iter, scope);
+      const iterScope = (index === 0 && outerScope) ? outerScope : scope;
+      const iterable = self.evaluateExpression(clause.iter, iterScope);
       const items = Array.isArray(iterable) ? iterable : Array.from(iterable);
       for (const item of items) {
         self.assignTarget(clause.target, item, scope);
