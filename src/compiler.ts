@@ -6,7 +6,7 @@
 import { Lexer } from './lexer';
 import { Parser } from './parser';
 import { Compiler } from './compiler_module';
-import { VirtualMachine } from './vm';
+import { PyValue, VirtualMachine } from './vm';
 import * as path from 'path';
 
 export class PythonCompiler {
@@ -15,7 +15,7 @@ export class PythonCompiler {
    * @param code Python 源代码
    * @returns 执行结果
    */
-  run(code: string): any {
+  run(code: string): PyValue {
     // 1. 词法分析
     const lexer = new Lexer(code);
     const tokens = lexer.tokenize();
@@ -40,7 +40,7 @@ export class PythonCompiler {
    * @param filePath 文件路径
    * @returns 执行结果
    */
-  runFile(filePath: string): any {
+  runFile(filePath: string): PyValue {
     const fs = require('fs');
     const code = fs.readFileSync(filePath, 'utf-8');
     const lexer = new Lexer(code);

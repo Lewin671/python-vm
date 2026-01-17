@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { VirtualMachine } from './vm';
 import { ASTNodeType, CompareOp } from '../types';
 import { PyValue, BreakSignal, ContinueSignal, PyClass, PyDict, PyException, PyInstance, PySet, ReturnSignal, Scope } from './runtime-types';
@@ -118,7 +117,7 @@ export function* executeBlockGenerator(
   this: VirtualMachine,
   body: PyValue[],
   scope: Scope
-): Generator<any, PyValue> {
+): Generator<PyValue, PyValue> {
   for (const stmt of body) {
     yield* this.executeStatementGenerator(stmt, scope);
   }
@@ -129,7 +128,7 @@ export function* executeStatementGenerator(
   this: VirtualMachine,
   node: PyValue,
   scope: Scope
-): Generator<any, PyValue> {
+): Generator<PyValue, PyValue> {
   const isSubclass = (klass: PyClass, target: PyClass): boolean => {
     if (klass === target) return true;
     return klass.bases.some((b) => isSubclass(b, target));

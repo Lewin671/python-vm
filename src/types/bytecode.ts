@@ -1,14 +1,15 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+import type { PyValue } from '../vm/runtime-types';
+
 /**
  * 字节码类型定义
  */
 export interface ByteCode {
   instructions: Instruction[];
-  constants: any[];
+  constants: PyValue[];
   names: string[];
   varnames: string[]; // 局部变量名
   argcount: number;   // 参数个数
-  params?: any[];     // 参数定义
+  params?: PyValue[]; // 参数定义
   filename?: string;
   name?: string;      // 函数名或代码块名
   globals?: string[];

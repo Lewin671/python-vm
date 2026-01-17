@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import type { Parser } from './parser';
 import { ASTNode, ASTNodeType, TokenType } from '../types';
 
@@ -130,11 +130,11 @@ export function parseFunctionParameters(this: Parser): ASTNode[] {
       if (this.match(TokenType.OPERATOR, '*')) {
         this.consume();
         const name = this.expect(TokenType.IDENTIFIER).value;
-        params.push({ type: 'VarArg', name } as any);
+        params.push({ type: 'VarArg', name } as ASTNode);
       } else if (this.match(TokenType.OPERATOR, '**')) {
         this.consume();
         const name = this.expect(TokenType.IDENTIFIER).value;
-        params.push({ type: 'KwArg', name } as any);
+        params.push({ type: 'KwArg', name } as ASTNode);
       } else if (this.match(TokenType.IDENTIFIER)) {
         const name = this.consume().value;
         let defaultValue: ASTNode | null = null;
@@ -142,7 +142,7 @@ export function parseFunctionParameters(this: Parser): ASTNode[] {
           this.consume();
           defaultValue = this.parseExpression();
         }
-        params.push({ type: 'Param', name, defaultValue } as any);
+        params.push({ type: 'Param', name, defaultValue } as ASTNode);
       }
       if (!this.match(TokenType.COMMA)) break;
       this.consume();
@@ -232,7 +232,7 @@ export function parseTryStatement(this: Parser): ASTNode {
 
 export function parseWithStatement(this: Parser): ASTNode {
   this.expect(TokenType.KEYWORD, 'with');
-  const items: any[] = [];
+  const items: Array<{ context: ASTNode; target: ASTNode | null }> = [];
   // eslint-disable-next-line no-constant-condition
   while (true) {
     const context = this.parseExpression();
@@ -305,7 +305,7 @@ export function parseStatement(this: Parser): ASTNode {
       this.consume();
       if (!this.match(TokenType.KEYWORD, 'def')) throw new Error('async must be followed by def');
       const node = this.parseFunctionDef(decorators);
-      (node as any).isAsync = true;
+      node['isAsync'] = true;
       return node;
     }
     if (this.match(TokenType.KEYWORD, 'def')) return this.parseFunctionDef(decorators);
@@ -316,7 +316,7 @@ export function parseStatement(this: Parser): ASTNode {
     this.consume();
     if (!this.match(TokenType.KEYWORD, 'def')) throw new Error('async must be followed by def');
     const node = this.parseFunctionDef();
-    (node as any).isAsync = true;
+    node['isAsync'] = true;
     return node;
   }
   if (this.match(TokenType.KEYWORD, 'import')) return this.parseImportStatement();

@@ -212,7 +212,7 @@ export class PyGenerator {
     if (typeof it.throw !== 'function') {
       throw new PyException('TypeError', 'object is not an iterator');
     }
-    const result = (it as unknown as { throw: (e: PyValue) => { done: boolean; value: PyValue } }).throw(exc);
+    const result = (it as PyValue as { throw: (e: PyValue) => { done: boolean; value: PyValue } }).throw(exc);
     if (result.done) {
       throw new PyException('StopIteration', 'StopIteration');
     }
@@ -221,8 +221,8 @@ export class PyGenerator {
 
   close() {
     const it = this.iterator;
-    if (typeof (it as unknown as { return?: (v: PyValue) => void }).return === 'function') {
-      (it as unknown as { return: (v: PyValue) => void }).return(null);
+    if (typeof (it as PyValue as { return?: (v: PyValue) => void }).return === 'function') {
+      (it as PyValue as { return: (v: PyValue) => void }).return(null);
     }
     return null;
   }
@@ -236,7 +236,7 @@ export type DictEntry = { key: PyValue; value: PyValue };
 
 export class PyDict {
   private primitiveStore: Map<string, DictEntry> = new Map();
-  private objectStore: Map<unknown, DictEntry> = new Map();
+  private objectStore: Map<PyValue, DictEntry> = new Map();
 
   get size(): number {
     return this.primitiveStore.size + this.objectStore.size;
@@ -300,7 +300,7 @@ export class PyDict {
     return this.keys();
   }
 
-  private keyInfo(key: PyValue): { store: Map<unknown, DictEntry>; id: unknown } {
+  private keyInfo(key: PyValue): { store: Map<PyValue, DictEntry>; id: PyValue } {
     const numeric = this.normalizeNumericKey(key);
     if (numeric !== null) {
       if (typeof numeric === 'number' && Number.isNaN(numeric)) {
@@ -317,7 +317,7 @@ export class PyDict {
     if (key === undefined) {
       return { store: this.primitiveStore, id: 'undefined' };
     }
-    return { store: this.objectStore, id: key };
+    return { store: this.objectStore as Map<PyValue, DictEntry>, id: key };
   }
 
   private normalizeNumericKey(key: PyValue): number | bigint | null {
@@ -334,7 +334,7 @@ export class PyDict {
 
 export class PySet {
   private primitiveStore: Map<string, PyValue> = new Map();
-  private objectStore: Map<unknown, PyValue> = new Map();
+  private objectStore: Map<PyValue, PyValue> = new Map();
 
   constructor(iterable?: Iterable<PyValue>) {
     if (iterable) {
@@ -384,7 +384,7 @@ export class PySet {
     return this.values();
   }
 
-  private valueInfo(value: PyValue): { store: Map<unknown, unknown>; id: unknown } {
+  private valueInfo(value: PyValue): { store: Map<PyValue, PyValue>; id: PyValue } {
     const numeric = this.normalizeNumeric(value);
     if (numeric !== null) {
       if (typeof numeric === 'number' && Number.isNaN(numeric)) {
@@ -401,7 +401,7 @@ export class PySet {
     if (value === undefined) {
       return { store: this.primitiveStore, id: 'undefined' };
     }
-    return { store: this.objectStore, id: value };
+    return { store: this.objectStore as Map<PyValue, PyValue>, id: value };
   }
 
   private normalizeNumeric(value: PyValue): number | bigint | null {

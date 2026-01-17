@@ -1,5 +1,5 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ASTNode, ASTNodeType, OpCode, CompareOp, BasicBlock, CFG } from '../types';
+import type { PyValue } from '../vm/runtime-types';
 import { Linearizer } from './linearizer';
 import { parseStringToken } from '../common/string-token';
 
@@ -8,7 +8,7 @@ export class CFGBuilder {
     private currentBlock: BasicBlock;
     private blockIdCounter = 0;
 
-    private constants: any[] = [];
+    private constants: PyValue[] = [];
     private names: string[] = [];
     private varnames: string[] = [];
     private argcount: number = 0;
@@ -42,7 +42,7 @@ export class CFGBuilder {
         this.currentBlock.instructions.push(arg !== undefined ? { opcode, arg } : { opcode });
     }
 
-    private getConstantIndex(value: any): number {
+    private getConstantIndex(value: PyValue): number {
         const index = this.constants.findIndex(c => c === value);
         if (index !== -1) return index;
         this.constants.push(value);
@@ -80,7 +80,7 @@ export class CFGBuilder {
     getGlobals() { return Array.from(this.globalVars); }
     getNonlocals() { return Array.from(this.nonlocalVars); }
 
-    private visit(node: any) {
+    private visit(node: ASTNode | null | undefined) {
         if (!node) return;
 
         switch (node.type) {
@@ -276,7 +276,7 @@ export class CFGBuilder {
             case ASTNodeType.CALL:
                 this.visit(node.callee || node.func);
                 {
-                    const rawArgs = (node.args || []) as any[];
+                    const rawArgs = (node.args || []) as ASTNode[];
                     const hasStar = rawArgs.some(a => a && a.type === 'StarArg');
                     const hasKw = rawArgs.some(a => a && a.type === 'KwArg');
 
@@ -298,8 +298,8 @@ export class CFGBuilder {
                             this.addInstruction(OpCode.CALL_FUNCTION_EX, 0);
                         }
                     } else {
-                        const positional: any[] = [];
-                        const keyword: Array<{ type: 'KeywordArg'; name: string; value: any }> = [];
+                        const positional: ASTNode[] = [];
+                        const keyword: Array<{ type: 'KeywordArg'; name: string; value: ASTNode }> = [];
 
                         for (const a of rawArgs) {
                             if (a && a.type === 'KeywordArg') {
@@ -346,7 +346,7 @@ export class CFGBuilder {
                 break;
 
             case ASTNodeType.CLASS_DEF: {
-                const bases = (node.bases || []) as any[];
+                const bases = (node.bases || []) as ASTNode[];
                 const subBuilder = new CFGBuilder(0, []);
                 const subCfg = subBuilder.build({ type: ASTNodeType.PROGRAM, body: node.body || [] });
                 const linearizer = new Linearizer();
@@ -635,7 +635,7 @@ export class CFGBuilder {
         this.addInstruction(OpCode.COMPARE_OP, op);
     }
 
-    private visitTarget(node: any, mode: 'store' | 'delete') {
+    private visitTarget(node: ASTNode, mode: 'store' | 'delete') {
         if (mode === 'store') {
             switch (node.type) {
                 case ASTNodeType.IDENTIFIER:
@@ -667,7 +667,7 @@ export class CFGBuilder {
                 case ASTNodeType.TUPLE_LITERAL:
                 case ASTNodeType.LIST_LITERAL: {
                     const elements = node.elements || [];
-                    const starIndex = elements.findIndex((el: any) => el && el.type === ASTNodeType.STARRED);
+                    const starIndex = elements.findIndex((el: ASTNode) => el && el.type === ASTNodeType.STARRED);
                     if (starIndex === -1) {
                         this.addInstruction(OpCode.UNPACK_SEQUENCE, elements.length);
                     } else {
@@ -718,7 +718,7 @@ export class CFGBuilder {
         }
     }
 
-    private visitIf(node: any) {
+    private visitIf(node: ASTNode) {
         const thenBlock = this.createBlock();
 
         // Convert elifs to nested if statements in orelse
@@ -768,7 +768,7 @@ export class CFGBuilder {
         this.currentBlock = mergeBlock;
     }
 
-    private visitWhile(node: any) {
+    private visitWhile(node: ASTNode) {
         const loopBlock = this.createBlock();
         const bodyBlock = this.createBlock();
         const endBlock = this.createBlock();
@@ -806,7 +806,7 @@ export class CFGBuilder {
         this.currentBlock = endBlock;
     }
 
-    private visitFor(node: any) {
+    private visitFor(node: PyValue) {
         this.visit(node.iter);
         this.addInstruction(OpCode.GET_ITER);
 
@@ -851,16 +851,16 @@ export class CFGBuilder {
         this.currentBlock = endBlock;
     }
 
-    private visitFunctionDef(node: any) {
+    private visitFunctionDef(node: PyValue) {
         const isGenerator = this.containsYield(node.body || []);
-        const parameterNames = node.params.map((p: any) => p.name);
+        const parameterNames = node.params.map((p: PyValue) => p.name);
 
         // Analyze function body to find all assigned variables (for local scope detection)
         const assignedVars = this.findAssignedVariables(node.body || []);
         const localVars = [...parameterNames, ...assignedVars];
 
         // Evaluate default arguments at function definition time
-        const defaultsCount = node.params.filter((p: any) => p.defaultValue).length;
+        const defaultsCount = node.params.filter((p: PyValue) => p.defaultValue).length;
         for (const param of node.params) {
             if (param.defaultValue) {
                 this.visit(param.defaultValue);
@@ -887,9 +887,9 @@ export class CFGBuilder {
             subBuilder.getNonlocals()
         );
         subBytecode.name = node.name;
-        (subBytecode as any).isGenerator = isGenerator;
+        (subBytecode as PyValue).isGenerator = isGenerator;
         if (isGenerator) {
-            (subBytecode as any).astBody = node.body || [];
+            (subBytecode as PyValue).astBody = node.body || [];
         }
 
         this.addInstruction(OpCode.LOAD_CONST, this.getConstantIndex(subBytecode));
@@ -905,8 +905,8 @@ export class CFGBuilder {
         this.addInstruction(OpCode.STORE_NAME, this.getNameIndex(node.name));
     }
 
-    private containsYield(body: any[]): boolean {
-        const visitAny = (n: any): boolean => {
+    private containsYield(body: PyValue[]): boolean {
+        const visitAny = (n: PyValue): boolean => {
             if (!n) return false;
             if (Array.isArray(n)) {
                 return n.some(visitAny);
@@ -922,12 +922,12 @@ export class CFGBuilder {
         return visitAny(body);
     }
 
-    private findAssignedVariables(body: any[]): string[] {
+    private findAssignedVariables(body: PyValue[]): string[] {
         const assigned = new Set<string>();
         const globals = new Set<string>();
         const nonlocals = new Set<string>();
 
-        const visit = (n: any) => {
+        const visit = (n: PyValue) => {
             if (!n) return;
             if (Array.isArray(n)) {
                 n.forEach(visit);
@@ -947,7 +947,7 @@ export class CFGBuilder {
                     break;
                 case ASTNodeType.ASSIGNMENT:
                     if (n.targets) {
-                        n.targets.forEach((t: any) => this.extractAssignedNames(t, assigned));
+                        n.targets.forEach((t: PyValue) => this.extractAssignedNames(t, assigned));
                     }
                     break;
                 case ASTNodeType.AUG_ASSIGNMENT:
@@ -958,7 +958,7 @@ export class CFGBuilder {
                 case ASTNodeType.FOR_STATEMENT:
                     if (n.target) {
                         if (Array.isArray(n.target)) {
-                            n.target.forEach((t: any) => this.extractAssignedNames(t, assigned));
+                            n.target.forEach((t: PyValue) => this.extractAssignedNames(t, assigned));
                         } else {
                             this.extractAssignedNames(n.target, assigned);
                         }
@@ -988,13 +988,13 @@ export class CFGBuilder {
         return Array.from(assigned);
     }
 
-    private extractAssignedNames(target: any, assigned: Set<string>) {
+    private extractAssignedNames(target: PyValue, assigned: Set<string>) {
         if (!target) return;
         if (target.type === ASTNodeType.IDENTIFIER) {
             assigned.add(target.name);
         } else if (target.type === ASTNodeType.TUPLE_LITERAL || target.type === ASTNodeType.LIST_LITERAL) {
             if (target.elements) {
-                target.elements.forEach((el: any) => this.extractAssignedNames(el, assigned));
+                target.elements.forEach((el: PyValue) => this.extractAssignedNames(el, assigned));
             }
         } else if (target.type === ASTNodeType.STARRED) {
             this.extractAssignedNames(target.target, assigned);
@@ -1002,19 +1002,19 @@ export class CFGBuilder {
         // Don't extract from subscripts or attributes - those aren't local variable assignments
     }
 
-    private visitLambda(node: any) {
+    private visitLambda(node: PyValue) {
         // Parser represents lambda params as strings (e.g. ['x'] or ['*args', '**kwargs']).
         // Normalize to the same param shape as FunctionDef so VM call binding works.
-        const rawParams: any[] = Array.isArray(node.params) ? node.params : [];
-        const params = rawParams.map((p: any) => {
+        const rawParams: PyValue[] = Array.isArray(node.params) ? node.params : [];
+        const params = rawParams.map((p: PyValue) => {
             if (typeof p === 'string') {
-                if (p.startsWith('**')) return { type: 'KwArg', name: p.slice(2) } as any;
-                if (p.startsWith('*')) return { type: 'VarArg', name: p.slice(1) } as any;
-                return { type: 'Param', name: p, defaultValue: null } as any;
+                if (p.startsWith('**')) return { type: 'KwArg', name: p.slice(2) } as PyValue;
+                if (p.startsWith('*')) return { type: 'VarArg', name: p.slice(1) } as PyValue;
+                return { type: 'Param', name: p, defaultValue: null } as PyValue;
             }
             return p;
         });
-        const parameterNames = params.map((p: any) => p.name);
+        const parameterNames = params.map((p: PyValue) => p.name);
         const subBuilder = new CFGBuilder(params.length, parameterNames);
         const bodyBlock = { type: ASTNodeType.RETURN_STATEMENT, value: node.body };
         const subCfg = subBuilder.build({ type: ASTNodeType.PROGRAM, body: [bodyBlock] });
@@ -1046,7 +1046,7 @@ export class CFGBuilder {
         }
     }
 
-    private visitBoolOp(node: any) {
+    private visitBoolOp(node: PyValue) {
         // Boolean operations with short-circuit evaluation
         // For 'and': if first is false, skip rest
         // For 'or': if first is true, skip rest
@@ -1084,7 +1084,7 @@ export class CFGBuilder {
         }
     }
 
-    private visitIfExpression(node: any) {
+    private visitIfExpression(node: PyValue) {
         // Ternary: <body> if <test> else <orelse>
         // Evaluate test first
         this.visit(node.test);
@@ -1113,10 +1113,10 @@ export class CFGBuilder {
         this.currentBlock = mergeBlock;
     }
 
-    private visitTry(node: any) {
-        const handlers = (node.handlers || []) as Array<{ exceptionType: any; name: string | null; body: any[] }>;
-        const orelse = (node.orelse || []) as any[];
-        const finalbody = (node.finalbody || []) as any[];
+    private visitTry(node: PyValue) {
+        const handlers = (node.handlers || []) as Array<{ exceptionType: PyValue; name: string | null; body: PyValue[] }>;
+        const orelse = (node.orelse || []) as PyValue[];
+        const finalbody = (node.finalbody || []) as PyValue[];
 
         const hasHandlers = handlers.length > 0;
         const hasElse = orelse.length > 0;
@@ -1274,14 +1274,14 @@ export class CFGBuilder {
         this.currentBlock = afterTry;
     }
 
-    private visitWith(node: any) {
+    private visitWith(node: PyValue) {
         const items = node.items || [];
         const body = node.body || [];
 
         this.processWithItems(items, 0, body);
     }
 
-    private processWithItems(items: any[], index: number, body: any[]) {
+    private processWithItems(items: PyValue[], index: number, body: PyValue[]) {
         if (index >= items.length) {
             // All context managers entered, process body
             for (const stmt of body) {
@@ -1357,7 +1357,7 @@ export class CFGBuilder {
         this.currentBlock = afterWithBlock;
     }
 
-    private visitMatch(node: any) {
+    private visitMatch(node: PyValue) {
         // match subject:
         //    case pattern: body
 
@@ -1425,7 +1425,7 @@ export class CFGBuilder {
     }
 
     // Helper to compile basic patterns
-    private compilePattern(pattern: any, failBlock: BasicBlock, successBlock: BasicBlock) {
+    private compilePattern(pattern: PyValue, failBlock: BasicBlock, successBlock: BasicBlock) {
         // This is complex to implement fully without specialized opcodes.
         // We'll implement a fallback for the specific test case:
         // 0 | 1

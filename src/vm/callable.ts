@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { VirtualMachine } from './vm';
 import { ASTNodeType } from '../types';
 import { PyValue, PyClass, PyDict, PyException, PyFunction, PyGenerator, PyInstance, ReturnSignal, Scope, Frame } from './runtime-types';
@@ -133,12 +132,12 @@ export function* generateComprehension(
   scope: Scope,
   valueFactory: () => PyValue,
   outerScope?: Scope
-): Generator<any, PyValue> {
+): Generator<PyValue, PyValue> {
   const clauses = node.clauses || [];
   // eslint-disable-next-line @typescript-eslint/no-this-alias
   const vm = this;
-  const walk = (index: number): Generator<any, PyValue> => {
-    return (function* (): Generator<any, PyValue> {
+  const walk = (index: number): Generator<PyValue, PyValue> => {
+    return (function* (): Generator<PyValue, PyValue> {
       if (index >= clauses.length) {
         yield valueFactory();
         return;

@@ -1,14 +1,14 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ByteCode, CFG, BasicBlock, OpCode, Instruction } from '../types';
+import type { PyValue } from '../vm/runtime-types';
 
 export class Linearizer {
     linearize(
         cfg: CFG,
-        constants: any[],
+        constants: PyValue[],
         names: string[],
         varnames: string[],
         argcount: number = 0,
-        params?: any[],
+        params?: PyValue[],
         globals?: string[],
         nonlocals?: string[]
     ): ByteCode {

@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+
 import type { Parser } from './parser';
 import { ASTNode, ASTNodeType, TokenType } from '../types';
 
@@ -40,12 +40,12 @@ export function parseArguments(this: Parser): ASTNode[] {
       if (this.match(TokenType.OPERATOR, '*') || this.match(TokenType.OPERATOR, '**')) {
         const op = this.consume().value;
         const value = this.parseExpression();
-        args.push({ type: op === '*' ? 'StarArg' : 'KwArg', value } as any);
+        args.push({ type: op === '*' ? 'StarArg' : 'KwArg', value } as ASTNode);
       } else if (this.match(TokenType.IDENTIFIER) && this.peek(1)?.type === TokenType.ASSIGN) {
         const name = this.consume().value;
         this.consume();
         const value = this.parseExpression();
-        args.push({ type: 'KeywordArg', name, value } as any);
+        args.push({ type: 'KeywordArg', name, value } as ASTNode);
       } else {
         args.push(this.parseExpression());
       }
@@ -76,12 +76,12 @@ export function parseSlice(this: Parser): ASTNode {
 
 export function parsePatternAtom(this: Parser): ASTNode {
   if (this.match(TokenType.NUMBER) || this.match(TokenType.STRING) || this.match(TokenType.BOOLEAN) || this.match(TokenType.NONE)) {
-    return { type: ASTNodeType.MATCH_PATTERN_VALUE, value: this.parseLiteral() } as any;
+    return { type: ASTNodeType.MATCH_PATTERN_VALUE, value: this.parseLiteral() } as ASTNode;
   }
   if (this.match(TokenType.IDENTIFIER)) {
     const name = this.consume().value;
-    if (name === '_') return { type: ASTNodeType.MATCH_PATTERN_WILDCARD } as any;
-    return { type: ASTNodeType.MATCH_PATTERN_CAPTURE, name } as any;
+    if (name === '_') return { type: ASTNodeType.MATCH_PATTERN_WILDCARD } as ASTNode;
+    return { type: ASTNodeType.MATCH_PATTERN_CAPTURE, name } as ASTNode;
   }
   if (this.match(TokenType.LBRACKET)) {
     this.consume();
@@ -95,7 +95,7 @@ export function parsePatternAtom(this: Parser): ASTNode {
       }
     }
     this.expect(TokenType.RBRACKET);
-    return { type: ASTNodeType.MATCH_PATTERN_SEQUENCE, elements } as any;
+    return { type: ASTNodeType.MATCH_PATTERN_SEQUENCE, elements } as ASTNode;
   }
   throw new Error(`Unexpected token in pattern: ${this.peek()?.value}`);
 }
@@ -108,7 +108,7 @@ export function parsePattern(this: Parser): ASTNode {
       this.consume();
       patterns.push(this.parsePatternAtom());
     }
-    pattern = { type: ASTNodeType.MATCH_PATTERN_OR, patterns } as any;
+    pattern = { type: ASTNodeType.MATCH_PATTERN_OR, patterns } as ASTNode;
   }
   return pattern;
 }
@@ -212,7 +212,7 @@ export function parseAtom(this: Parser): ASTNode {
       this.consume();
       const value = this.parseExpression();
       if (this.match(TokenType.KEYWORD, 'for')) {
-        const comprehension = this.parseComprehension({ type: 'KeyValue', key, value } as any);
+        const comprehension = this.parseComprehension({ type: 'KeyValue', key, value } as ASTNode);
         this.expect(TokenType.RBRACE);
         return { type: ASTNodeType.DICT_COMP, key, value, comprehension };
       }
@@ -449,7 +449,7 @@ export function parseExpressionNoIf(this: Parser): ASTNode {
 }
 
 export function parseComprehension(this: Parser, expression: ASTNode): ASTNode {
-  const clauses: any[] = [];
+  const clauses: Array<{ target: ASTNode; iter: ASTNode; ifs: ASTNode[] }> = [];
   while (this.match(TokenType.KEYWORD, 'for')) {
     this.consume();
     const target = this.parseTarget();
@@ -462,5 +462,5 @@ export function parseComprehension(this: Parser, expression: ASTNode): ASTNode {
     }
     clauses.push({ target, iter, ifs });
   }
-  return { clauses, expression } as any;
+  return { type: 'Comprehension', clauses, expression } as ASTNode;
 }
