@@ -62,216 +62,185 @@ export enum ASTNodeType {
   KEY_VALUE = 'KeyValue',
 }
 
-export interface Program {
-  type: ASTNodeType.PROGRAM;
+export interface BaseASTNode<T extends ASTNodeType = ASTNodeType> {
+  type: T;
+  // Common metadata like source location can be added here
+  lineno?: number;
+  col_offset?: number;
+}
+
+export interface Program extends BaseASTNode<ASTNodeType.PROGRAM> {
   body: ASTNode[];
 }
 
-export interface ExpressionStatement {
-  type: ASTNodeType.EXPRESSION_STATEMENT;
+export interface ExpressionStatement extends BaseASTNode<ASTNodeType.EXPRESSION_STATEMENT> {
   expression: ASTNode;
 }
 
-export interface BinaryOperation {
-  type: ASTNodeType.BINARY_OPERATION;
+export interface BinaryOperation extends BaseASTNode<ASTNodeType.BINARY_OPERATION> {
   left: ASTNode;
   right: ASTNode;
   operator: string;
 }
 
-export interface UnaryOperation {
-  type: ASTNodeType.UNARY_OPERATION;
+export interface UnaryOperation extends BaseASTNode<ASTNodeType.UNARY_OPERATION> {
   operator: string;
   operand: ASTNode;
 }
 
-export interface BoolOperation {
-  type: ASTNodeType.BOOL_OPERATION;
+export interface BoolOperation extends BaseASTNode<ASTNodeType.BOOL_OPERATION> {
   operator: 'and' | 'or';
   values: ASTNode[];
 }
 
-export interface Compare {
-  type: ASTNodeType.COMPARE;
+export interface Compare extends BaseASTNode<ASTNodeType.COMPARE> {
   left: ASTNode;
   ops: string[];
   comparators: ASTNode[];
 }
 
-export interface Call {
-  type: ASTNodeType.CALL;
+export interface Call extends BaseASTNode<ASTNodeType.CALL> {
   callee: ASTNode;
   args: ASTNode[];
 }
 
-export interface Attribute {
-  type: ASTNodeType.ATTRIBUTE;
+export interface Attribute extends BaseASTNode<ASTNodeType.ATTRIBUTE> {
   object: ASTNode;
   name: string;
 }
 
-export interface Subscript {
-  type: ASTNodeType.SUBSCRIPT;
+export interface Subscript extends BaseASTNode<ASTNodeType.SUBSCRIPT> {
   object: ASTNode;
   index: ASTNode;
 }
 
-export interface IfExpression {
-  type: ASTNodeType.IF_EXPRESSION;
+export interface IfExpression extends BaseASTNode<ASTNodeType.IF_EXPRESSION> {
   test: ASTNode;
   consequent: ASTNode;
   alternate: ASTNode;
 }
 
-export interface ListLiteral {
-  type: ASTNodeType.LIST_LITERAL;
+export interface ListLiteral extends BaseASTNode<ASTNodeType.LIST_LITERAL> {
   elements: ASTNode[];
 }
 
-export interface TupleLiteral {
-  type: ASTNodeType.TUPLE_LITERAL;
+export interface TupleLiteral extends BaseASTNode<ASTNodeType.TUPLE_LITERAL> {
   elements: ASTNode[];
 }
 
-export interface DictLiteral {
-  type: ASTNodeType.DICT_LITERAL;
+export interface DictLiteral extends BaseASTNode<ASTNodeType.DICT_LITERAL> {
   entries: { key: ASTNode; value: ASTNode }[];
 }
 
-export interface SetLiteral {
-  type: ASTNodeType.SET_LITERAL;
+export interface SetLiteral extends BaseASTNode<ASTNodeType.SET_LITERAL> {
   elements: ASTNode[];
 }
 
-export interface NumberLiteral {
-  type: ASTNodeType.NUMBER_LITERAL;
+export interface NumberLiteral extends BaseASTNode<ASTNodeType.NUMBER_LITERAL> {
   value: string | number;
 }
 
-export interface StringLiteral {
-  type: ASTNodeType.STRING_LITERAL;
+export interface StringLiteral extends BaseASTNode<ASTNodeType.STRING_LITERAL> {
   value: string;
 }
 
-export interface BooleanLiteral {
-  type: ASTNodeType.BOOLEAN_LITERAL;
+export interface BooleanLiteral extends BaseASTNode<ASTNodeType.BOOLEAN_LITERAL> {
   value: boolean;
 }
 
-export interface NoneLiteral {
-  type: ASTNodeType.NONE_LITERAL;
+export interface NoneLiteral extends BaseASTNode<ASTNodeType.NONE_LITERAL> {
   value: null;
 }
 
-export interface Identifier {
-  type: ASTNodeType.IDENTIFIER;
+export interface Identifier extends BaseASTNode<ASTNodeType.IDENTIFIER> {
   name: string;
 }
 
-export interface Assignment {
-  type: ASTNodeType.ASSIGNMENT;
+export interface Assignment extends BaseASTNode<ASTNodeType.ASSIGNMENT> {
   targets: ASTNode[];
   value: ASTNode;
 }
 
-export interface AugAssignment {
-  type: ASTNodeType.AUG_ASSIGNMENT;
+export interface AugAssignment extends BaseASTNode<ASTNodeType.AUG_ASSIGNMENT> {
   target: ASTNode;
   operator: string;
   value: ASTNode;
 }
 
-export interface AssertStatement {
-  type: ASTNodeType.ASSERT_STATEMENT;
+export interface AssertStatement extends BaseASTNode<ASTNodeType.ASSERT_STATEMENT> {
   test: ASTNode;
   message: ASTNode | null;
 }
 
-export interface RaiseStatement {
-  type: ASTNodeType.RAISE_STATEMENT;
+export interface RaiseStatement extends BaseASTNode<ASTNodeType.RAISE_STATEMENT> {
   exception: ASTNode | null;
 }
 
-export interface PassStatement {
-  type: ASTNodeType.PASS_STATEMENT;
+export interface PassStatement extends BaseASTNode<ASTNodeType.PASS_STATEMENT> {
 }
 
-export interface BreakStatement {
-  type: ASTNodeType.BREAK_STATEMENT;
+export interface BreakStatement extends BaseASTNode<ASTNodeType.BREAK_STATEMENT> {
 }
 
-export interface ContinueStatement {
-  type: ASTNodeType.CONTINUE_STATEMENT;
+export interface ContinueStatement extends BaseASTNode<ASTNodeType.CONTINUE_STATEMENT> {
 }
 
-export interface ReturnStatement {
-  type: ASTNodeType.RETURN_STATEMENT;
+export interface ReturnStatement extends BaseASTNode<ASTNodeType.RETURN_STATEMENT> {
   value: ASTNode | null;
 }
 
-export interface Yield {
-  type: ASTNodeType.YIELD;
+export interface Yield extends BaseASTNode<ASTNodeType.YIELD> {
   value: ASTNode | null;
 }
 
-export interface GlobalStatement {
-  type: ASTNodeType.GLOBAL_STATEMENT;
+export interface GlobalStatement extends BaseASTNode<ASTNodeType.GLOBAL_STATEMENT> {
   names: string[];
 }
 
-export interface NonlocalStatement {
-  type: ASTNodeType.NONLOCAL_STATEMENT;
+export interface NonlocalStatement extends BaseASTNode<ASTNodeType.NONLOCAL_STATEMENT> {
   names: string[];
 }
 
-export interface DeleteStatement {
-  type: ASTNodeType.DELETE_STATEMENT;
+export interface DeleteStatement extends BaseASTNode<ASTNodeType.DELETE_STATEMENT> {
   targets?: ASTNode[]; // CFGBuilder uses targets
   target?: ASTNode;    // parser uses target
 }
 
-export interface ImportStatement {
-  type: ASTNodeType.IMPORT_STATEMENT;
+export interface ImportStatement extends BaseASTNode<ASTNodeType.IMPORT_STATEMENT> {
   names: { name: string; alias: string | null; asname?: string | null }[];
 }
 
-export interface IfStatement {
-  type: ASTNodeType.IF_STATEMENT;
+export interface IfStatement extends BaseASTNode<ASTNodeType.IF_STATEMENT> {
   test: ASTNode;
   body: ASTNode[];
   elifs: { test: ASTNode; body: ASTNode[] }[];
   orelse: ASTNode[];
 }
 
-export interface WhileStatement {
-  type: ASTNodeType.WHILE_STATEMENT;
+export interface WhileStatement extends BaseASTNode<ASTNodeType.WHILE_STATEMENT> {
   test: ASTNode;
   body: ASTNode[];
 }
 
-export interface ForStatement {
-  type: ASTNodeType.FOR_STATEMENT;
+export interface ForStatement extends BaseASTNode<ASTNodeType.FOR_STATEMENT> {
   target: ASTNode;
   iter: ASTNode;
   body: ASTNode[];
 }
 
-export interface TryStatement {
-  type: ASTNodeType.TRY_STATEMENT;
+export interface TryStatement extends BaseASTNode<ASTNodeType.TRY_STATEMENT> {
   body: ASTNode[];
   handlers: { exceptionType: ASTNode | null; name: string | null; body: ASTNode[] }[];
   orelse: ASTNode[];
   finalbody: ASTNode[];
 }
 
-export interface WithStatement {
-  type: ASTNodeType.WITH_STATEMENT;
+export interface WithStatement extends BaseASTNode<ASTNodeType.WITH_STATEMENT> {
   items: { context: ASTNode; target: ASTNode | null }[];
   body: ASTNode[];
 }
 
-export interface FunctionDef {
-  type: ASTNodeType.FUNCTION_DEF;
+export interface FunctionDef extends BaseASTNode<ASTNodeType.FUNCTION_DEF> {
   name: string;
   params: ASTNode[];
   body: ASTNode[];
@@ -279,112 +248,93 @@ export interface FunctionDef {
   isAsync?: boolean;
 }
 
-export interface ClassDef {
-  type: ASTNodeType.CLASS_DEF;
+export interface ClassDef extends BaseASTNode<ASTNodeType.CLASS_DEF> {
   name: string;
   bases: ASTNode[];
   body: ASTNode[];
   decorators: ASTNode[];
 }
 
-export interface Lambda {
-  type: ASTNodeType.LAMBDA;
+export interface Lambda extends BaseASTNode<ASTNodeType.LAMBDA> {
   params: string[];
   body: ASTNode;
 }
 
-export interface MatchStatement {
-  type: ASTNodeType.MATCH_STATEMENT;
+export interface MatchStatement extends BaseASTNode<ASTNodeType.MATCH_STATEMENT> {
   subject: ASTNode;
   cases: { pattern: ASTNode; guard: ASTNode | null; body: ASTNode[] }[];
 }
 
-export interface MatchPatternValue {
-  type: ASTNodeType.MATCH_PATTERN_VALUE;
+export interface MatchPatternValue extends BaseASTNode<ASTNodeType.MATCH_PATTERN_VALUE> {
   value: ASTNode;
 }
 
-export interface MatchPatternWildcard {
-  type: ASTNodeType.MATCH_PATTERN_WILDCARD;
+export interface MatchPatternWildcard extends BaseASTNode<ASTNodeType.MATCH_PATTERN_WILDCARD> {
 }
 
-export interface MatchPatternCapture {
-  type: ASTNodeType.MATCH_PATTERN_CAPTURE;
+export interface MatchPatternCapture extends BaseASTNode<ASTNodeType.MATCH_PATTERN_CAPTURE> {
   name: string;
 }
 
-export interface MatchPatternSequence {
-  type: ASTNodeType.MATCH_PATTERN_SEQUENCE;
+export interface MatchPatternSequence extends BaseASTNode<ASTNodeType.MATCH_PATTERN_SEQUENCE> {
   elements: ASTNode[];
 }
 
-export interface MatchPatternOr {
-  type: ASTNodeType.MATCH_PATTERN_OR;
+export interface MatchPatternOr extends BaseASTNode<ASTNodeType.MATCH_PATTERN_OR> {
   patterns: ASTNode[];
 }
 
-export interface ListComp {
-  type: ASTNodeType.LIST_COMP | ASTNodeType.SET_COMP | ASTNodeType.GENERATOR_EXPR;
+export interface ListComp extends BaseASTNode<ASTNodeType.LIST_COMP | ASTNodeType.SET_COMP | ASTNodeType.GENERATOR_EXPR> {
   expression: ASTNode;
   comprehension: ASTNode;
 }
 
-export interface DictComp {
-  type: ASTNodeType.DICT_COMP;
+export interface DictComp extends BaseASTNode<ASTNodeType.DICT_COMP> {
   key: ASTNode;
   value: ASTNode;
   comprehension: ASTNode;
 }
 
-export interface Slice {
-  type: ASTNodeType.SLICE;
+export interface Slice extends BaseASTNode<ASTNodeType.SLICE> {
   start: ASTNode | null;
   end: ASTNode | null;
   step: ASTNode | null;
 }
 
-export interface Starred {
-  type: ASTNodeType.STARRED;
+export interface Starred extends BaseASTNode<ASTNodeType.STARRED> {
   target: ASTNode;
 }
 
 // Auxiliary Nodes
-export interface StarArg {
-  type: ASTNodeType.STAR_ARG;
+export interface StarArg extends BaseASTNode<ASTNodeType.STAR_ARG> {
   value: ASTNode;
 }
 
-export interface KwArg {
-  type: ASTNodeType.KW_ARG;
+export interface KwArg extends BaseASTNode<ASTNodeType.KW_ARG> {
   value?: ASTNode; // For call
   name?: string;  // For param
 }
 
-export interface KeywordArg {
-  type: ASTNodeType.KEYWORD_ARG;
+export interface KeywordArg extends BaseASTNode<ASTNodeType.KEYWORD_ARG> {
   name: string;
   value: ASTNode;
 }
 
-export interface VarArg {
-  type: ASTNodeType.VAR_ARG;
+export interface VarArg extends BaseASTNode<ASTNodeType.VAR_ARG> {
   name: string;
 }
 
-export interface Param {
-  type: ASTNodeType.PARAM;
+export interface Param extends BaseASTNode<ASTNodeType.PARAM> {
   name: string;
   defaultValue: ASTNode | null;
 }
 
-export interface Comprehension {
-  type: ASTNodeType.COMPREHENSION;
+export interface Comprehension extends BaseASTNode<ASTNodeType.COMPREHENSION> {
   clauses: { target: ASTNode; iter: ASTNode; ifs: ASTNode[] }[];
   expression: ASTNode;
 }
 
-export interface KeyValue {
-  type: ASTNodeType.KEY_VALUE;
+export interface KeyValue extends BaseASTNode<ASTNodeType.KEY_VALUE> {
   key: ASTNode;
   value: ASTNode;
 }
