@@ -340,7 +340,11 @@ export function getAttribute(this: VirtualMachine, obj: any, name: string, scope
     if (name === 'endswith') return (suffix: string) => obj.endsWith(suffix);
   }
   if (Array.isArray(obj)) {
-    if (name === 'append') return (value: any) => obj.push(value);
+    if (name === 'append')
+      return (value: any) => {
+        obj.push(value);
+        return null;
+      };
     if (name === 'pop') return (index?: number) => {
       if (index === undefined) return obj.pop();
       return obj.splice(index, 1)[0];
@@ -401,13 +405,22 @@ export function getAttribute(this: VirtualMachine, obj: any, name: string, scope
     return value;
   }
   if (obj instanceof Set) {
-    if (name === 'add') return (value: any) => obj.add(value);
+    if (name === 'add')
+      return (value: any) => {
+        obj.add(value);
+        return null;
+      };
     if (name === 'update')
       return (values: any) => {
         const items = Array.isArray(values) ? values : Array.from(values);
         for (const item of items) obj.add(item);
+        return null;
       };
-    if (name === 'remove') return (value: any) => obj.delete(value);
+    if (name === 'remove')
+      return (value: any) => {
+        obj.delete(value);
+        return null;
+      };
   }
   if (obj && typeof obj === 'object' && obj.__typeName__) {
     if (name === '__name__') return obj.__typeName__;
