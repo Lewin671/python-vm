@@ -33,6 +33,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
   const locals = frame.locals;
   const scope = frame.scope;
   const scopeValues = scope.values;
+  const iterSymbol = Symbol.iterator;
 
   const renderFString = (template: string, scope: Scope): string => {
     return template.replace(/\{([^}]+)\}/g, (_m, expr) => {
@@ -174,12 +175,14 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
         }
 
         case OpCode.CALL_FUNCTION: {
-          const args = [];
-          for (let i = 0; i < arg!; i++) {
-            args.unshift(stack.pop());
+          const argCount = arg!;
+          const args = new Array(argCount);
+          // Pop arguments in reverse order
+          for (let i = argCount - 1; i >= 0; i--) {
+            args[i] = stack.pop();
           }
           const func = stack.pop();
-          stack.push(this.callFunction(func, args, frame.scope));
+          stack.push(this.callFunction(func, args, scope));
           break;
         }
 
@@ -213,7 +216,18 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
 
         case OpCode.POP_JUMP_IF_FALSE: {
           const val = stack.pop();
-          if (!this.isTruthy(val, frame.scope)) {
+          // Fast path for booleans and numbers
+          let isFalse = false;
+          if (typeof val === 'boolean') {
+            isFalse = !val;
+          } else if (typeof val === 'number') {
+            isFalse = val === 0;
+          } else if (val === null || val === undefined) {
+            isFalse = true;
+          } else {
+            isFalse = !this.isTruthy(val, scope);
+          }
+          if (isFalse) {
             frame.pc = arg!;
           }
           break;
@@ -290,8 +304,8 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
 
         case OpCode.GET_ITER: {
           const obj = stack.pop();
-          if (obj && typeof obj[Symbol.iterator] === 'function') {
-            stack.push(obj[Symbol.iterator]());
+          if (obj && typeof obj[iterSymbol] === 'function') {
+            stack.push(obj[iterSymbol]());
           } else {
             throw new PyException('TypeError', `'${typeof obj}' object is not iterable`);
           }
@@ -308,21 +322,36 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
         case OpCode.BINARY_DIVIDE: {
           const b = stack.pop();
           const a = stack.pop();
-          stack.push(this.applyBinary('/', a, b));
+          // Fast path for simple numbers
+          if (typeof a === 'number' && typeof b === 'number') {
+            stack.push(a / b);
+          } else {
+            stack.push(this.applyBinary('/', a, b));
+          }
           break;
         }
 
         case OpCode.BINARY_FLOOR_DIVIDE: {
           const b = stack.pop();
           const a = stack.pop();
-          stack.push(this.applyBinary('//', a, b));
+          // Fast path for simple numbers
+          if (typeof a === 'number' && typeof b === 'number') {
+            stack.push(Math.floor(a / b));
+          } else {
+            stack.push(this.applyBinary('//', a, b));
+          }
           break;
         }
 
         case OpCode.BINARY_MODULO: {
           const b = stack.pop();
           const a = stack.pop();
-          stack.push(this.applyBinary('%', a, b));
+          // Fast path for simple numbers
+          if (typeof a === 'number' && typeof b === 'number') {
+            stack.push(a % b);
+          } else {
+            stack.push(this.applyBinary('%', a, b));
+          }
           break;
         }
 
@@ -683,15 +712,17 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
 
         // BUILD operations
         case OpCode.BUILD_LIST: {
-          const list = [];
-          for (let i = 0; i < arg!; i++) list.unshift(stack.pop());
+          const count = arg!;
+          const list = new Array(count);
+          for (let i = count - 1; i >= 0; i--) list[i] = stack.pop();
           stack.push(list);
           break;
         }
 
         case OpCode.BUILD_TUPLE: {
-          const tuple: PyValue[] = [];
-          for (let i = 0; i < arg!; i++) tuple.unshift(stack.pop());
+          const count = arg!;
+          const tuple: PyValue[] = new Array(count);
+          for (let i = count - 1; i >= 0; i--) tuple[i] = stack.pop();
           (tuple as PyValue).__tuple__ = true;
           stack.push(tuple);
           break;
@@ -735,10 +766,10 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
           const defaultsCount = arg || 0;
           const name = stack.pop();
           const bc = stack.pop();
-          const defaults: PyValue[] = [];
+          const defaults: PyValue[] = new Array(defaultsCount);
           // Pop default values from stack in reverse order (last default on top)
-          for (let i = 0; i < defaultsCount; i++) {
-            defaults.unshift(stack.pop());
+          for (let i = defaultsCount - 1; i >= 0; i--) {
+            defaults[i] = stack.pop();
           }
 
           // Create a copy of params with evaluated defaults
@@ -765,9 +796,9 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
           const kwList: PyValue[] = Array.isArray(kwNames) ? kwNames : [];
           const kwCount = kwList.length;
           const total = arg!;
-          const values: PyValue[] = [];
-          for (let i = 0; i < total; i++) {
-            values.unshift(stack.pop());
+          const values: PyValue[] = new Array(total);
+          for (let i = total - 1; i >= 0; i--) {
+            values[i] = stack.pop();
           }
           const func = stack.pop();
           const positionalCount = total - kwCount;
