@@ -19,7 +19,9 @@
     "test:coverage": "PYTHONHASHSEED=0 vitest run --coverage",
     "benchmark": "npm run build && node scripts/benchmark.cjs",
     "lint": "eslint src/**/*.ts",
-    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\""
+    "format": "prettier --write \"src/**/*.ts\" \"tests/**/*.ts\"",
+    "prepublishOnly": "npm run build",
+    "postpublish": "bash scripts/release.sh"
   },
   "keywords": [
     "python",
