@@ -1,6 +1,6 @@
 import type { VirtualMachine } from './vm';
 import { ASTNodeType } from '../types';
-import { PyClass, PyDict, PyException, PyFunction, PyGenerator, PyInstance, ReturnSignal, Scope } from './runtime-types';
+import { PyClass, PyDict, PyException, PyFunction, PyGenerator, PyInstance, ReturnSignal, Scope, Frame } from './runtime-types';
 
 export function callFunction(
   this: VirtualMachine,
@@ -9,12 +9,21 @@ export function callFunction(
   scope: Scope,
   kwargs: Record<string, any> = {}
 ): any {
+  // console.log('Calling', func, 'with', args);
   if (!kwargs) {
     kwargs = {};
   }
   if (func instanceof PyFunction) {
     const callScope = new Scope(func.closure);
     callScope.locals = new Set(func.localNames);
+    if (func.bytecode) {
+      if (func.bytecode.globals) {
+        func.bytecode.globals.forEach(g => callScope.globals.add(g));
+      }
+      if (func.bytecode.nonlocals) {
+        func.bytecode.nonlocals.forEach(n => callScope.nonlocals.add(n));
+      }
+    }
     for (const param of func.params) {
       if (param.type === 'Param') {
         let argValue: any;
@@ -49,6 +58,14 @@ export function callFunction(
       if (func.isGenerator) {
         const iterator = this.executeBlockGenerator(func.body, callScope);
         return new PyGenerator(iterator);
+      }
+      if (func.bytecode && func.bytecode.instructions) {
+        const frame = new Frame(func.bytecode, callScope);
+        for (let i = 0; i < (func.bytecode.argcount || 0); i++) {
+          const varname = func.bytecode.varnames[i];
+          frame.locals[i] = callScope.values.get(varname);
+        }
+        return this.executeFrame(frame);
       }
       const result = this.executeBlock(func.body, callScope);
       return result;

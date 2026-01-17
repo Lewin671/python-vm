@@ -1,5 +1,5 @@
 import type { VirtualMachine } from './vm';
-import { PyClass, PyDict, PyException, PyFile, PyGenerator, PySet, Scope } from './runtime-types';
+import { PyClass, PyDict, PyException, PyFile, PyGenerator, PyInstance, PySet, Scope } from './runtime-types';
 import { isFloatLike, isNumericLike, pyStr, pyTypeName, toBigIntValue, toNumber } from './value-utils';
 
 export function installBuiltins(this: VirtualMachine, scope: Scope) {
@@ -156,7 +156,15 @@ export function installBuiltins(this: VirtualMachine, scope: Scope) {
   (boolFn as any).__typeName__ = 'bool';
   builtins.set('bool', boolFn);
   builtins.set('type', (value: any) => ({ __typeName__: pyTypeName(value) }));
+  const isSubclass = (klass: PyClass, target: PyClass): boolean => {
+    if (klass === target) return true;
+    return klass.bases.some((base) => isSubclass(base, target));
+  };
   builtins.set('isinstance', (value: any, typeObj: any) => {
+    if (typeObj instanceof PyClass) {
+      if (value instanceof PyInstance) return isSubclass(value.klass, typeObj);
+      return false;
+    }
     if (typeObj && typeObj.__typeName__) {
       return pyTypeName(value) === typeObj.__typeName__;
     }
@@ -239,4 +247,5 @@ export function installBuiltins(this: VirtualMachine, scope: Scope) {
   builtins.set('StopIteration', exceptionClass('StopIteration', ExceptionBase));
 
   scope.values = new Map([...builtins.entries()]);
+  // console.log('Installed builtins:', Array.from(scope.values.keys()));
 }

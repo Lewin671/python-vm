@@ -1,4 +1,5 @@
 import { PyClass, PyDict, PyException, PyFunction, PyInstance, PySet } from './runtime-types';
+export { parseStringToken } from '../common/string-token';
 
 export const isPyNone = (value: any) => value === null;
 
@@ -84,7 +85,11 @@ export const pyRepr = (value: any, seen: Set<any> = new Set()): string => {
     return Number.isInteger(num) ? `${num}.0` : String(num);
   }
   if (typeof value === 'boolean') return value ? 'True' : 'False';
-  if (typeof value === 'number') return Number.isNaN(value) ? 'nan' : String(value);
+  if (typeof value === 'number') {
+    if (Number.isNaN(value)) return 'nan';
+    if (Object.is(value, -0)) return '-0.0';
+    return String(value);
+  }
   if (typeof value === 'bigint') return value.toString();
   if (value && value.__complex__) {
     const sign = value.im >= 0 ? '+' : '-';
@@ -137,6 +142,10 @@ export const pyStr = (value: any): string => {
   if (value && value.__complex__) return pyRepr(value);
   if (value && value.__typeName__) return `<class '${value.__typeName__}'>`;
   if (value instanceof PyException) return value.message;
+  if (value instanceof PyInstance && value.klass.isException) {
+    const msg = value.attributes.get('message');
+    return msg === undefined || msg === null ? '' : String(msg);
+  }
   return pyRepr(value);
 };
 
@@ -167,25 +176,6 @@ export const pythonModulo = (left: any, right: any) => {
     return new Number(result);
   }
   return result;
-};
-
-export const parseStringToken = (tokenValue: string): { value: string; isFString: boolean } => {
-  let raw = tokenValue;
-  let isFString = false;
-  if (raw.startsWith('f') || raw.startsWith('F')) {
-    isFString = true;
-    raw = raw.slice(1);
-  }
-  const quote = raw[0];
-  if (raw.startsWith(quote.repeat(3))) {
-    const inner = raw.slice(3, -3);
-    return { value: inner, isFString };
-  }
-  const inner = raw.slice(1, -1);
-  return {
-    value: inner.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\'/g, "'"),
-    isFString,
-  };
 };
 
 import { ASTNodeType } from '../types';

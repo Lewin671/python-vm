@@ -1,6 +1,6 @@
 import { installBuiltins } from './builtins';
 import { callFunction, containsYield, evaluateComprehension, expressionHasYield, generateComprehension } from './callable';
-import { execute, executeBlock, executeBlockGenerator, executeStatementGenerator, iterableToArray, matchPattern, matchValueEquals, applyBindings } from './execution';
+import { execute, executeFrame, executeBlock, executeBlockGenerator, executeStatementGenerator, iterableToArray, matchPattern, matchValueEquals, applyBindings, applyCompare } from './execution';
 import { evaluateExpressionGenerator } from './expression-generator';
 import { createAsyncioModule, importModule, loadModuleFromFile, resolveModulePath } from './imports';
 import {
@@ -37,6 +37,7 @@ export class VirtualMachine {
   }
 
   execute = execute;
+  executeFrame = executeFrame;
   installBuiltins = installBuiltins;
   importModule = importModule;
   createAsyncioModule = createAsyncioModule;
@@ -47,6 +48,7 @@ export class VirtualMachine {
   matchValueEquals = matchValueEquals;
   matchPattern = matchPattern;
   applyBindings = applyBindings;
+  applyCompare = applyCompare;
   executeBlockGenerator = executeBlockGenerator;
   executeStatementGenerator = executeStatementGenerator;
   evaluateExpressionGenerator = evaluateExpressionGenerator;

@@ -18,11 +18,11 @@ import {
 } from './value-utils';
 
 export function applyInPlaceBinary(this: VirtualMachine, op: string, left: any, right: any): any {
-  if (op === '+=' && Array.isArray(left) && !(left as any).__tuple__ && Array.isArray(right)) {
+  if (op === '+' && Array.isArray(left) && !(left as any).__tuple__ && Array.isArray(right)) {
     left.push(...right);
     return left;
   }
-  return this.applyBinary(op.slice(0, -1), left, right);
+  return this.applyBinary(op, left, right);
 }
 
 export function applyBinary(this: VirtualMachine, op: string, left: any, right: any): any {
@@ -205,10 +205,11 @@ export function formatPercent(this: VirtualMachine, format: string, value: any):
 }
 
 export function getSubscript(this: VirtualMachine, obj: any, index: any): any {
-  if (index && index.type === ASTNodeType.SLICE) {
-    const start = index.start !== null && index.start !== undefined ? index.start : null;
-    const end = index.end !== null && index.end !== undefined ? index.end : null;
-    const step = index.step !== null && index.step !== undefined ? index.step : 1;
+  // Check if index is a slice object (created by BUILD_SLICE opcode or AST node)
+  if (index && (index.type === ASTNodeType.SLICE || index.__slice__)) {
+    const start = index.start !== undefined ? index.start : null;
+    const end = index.end !== undefined ? index.end : null;
+    const step = index.step !== undefined ? index.step : 1;
     const indices = this.computeSliceIndices(obj.length, start, end, step);
     const result: any[] = [];
     for (const idx of indices) result.push(obj[idx]);

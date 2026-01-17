@@ -1,4 +1,5 @@
 import * as fs from 'fs';
+import { ByteCode } from '../types';
 
 export type ScopeValue = any;
 
@@ -9,8 +10,8 @@ export class ReturnSignal {
   }
 }
 
-export class BreakSignal {}
-export class ContinueSignal {}
+export class BreakSignal { }
+export class ContinueSignal { }
 
 export class PyException extends Error {
   pyType: string;
@@ -19,6 +20,21 @@ export class PyException extends Error {
     super(message || pyType);
     this.pyType = pyType;
     this.pyValue = pyValue;
+  }
+}
+
+export class Frame {
+  public stack: any[] = [];
+  public pc: number = 0;
+  public scope: Scope;
+  public bytecode: ByteCode;
+  public locals: any[] = [];
+  public blockStack: Array<{ handler: number; stackHeight: number }> = [];
+
+  constructor(bytecode: ByteCode, scope: Scope) {
+    this.bytecode = bytecode;
+    this.scope = scope;
+    this.locals = new Array((bytecode.varnames || []).length).fill(undefined);
   }
 }
 
@@ -42,10 +58,18 @@ export class Scope {
     if (this.locals.has(name)) {
       throw new PyException('UnboundLocalError', `local variable '${name}' referenced before assignment`);
     }
+
+    if (this.nonlocals.has(name) && this.parent) {
+      const scope = this.findScopeWith(name, true);
+      // If we found a scope, return the actual reference from its Map
+      if (scope) return scope.values.get(name);
+    }
+    
     let p: Scope | null = this.parent;
     while (p && p.isClassScope) {
       p = p.parent;
     }
+    
     if (p) {
       return p.get(name);
     }
@@ -58,13 +82,14 @@ export class Scope {
       return;
     }
     if (this.nonlocals.has(name) && this.parent) {
-      let p: Scope | null = this.parent;
-      while (p && p.isClassScope) {
-        p = p.parent;
-      }
-      const scope = p ? p.findScopeWith(name) : null;
+      const scope = this.findScopeWith(name, true);
       if (!scope) {
         throw new PyException('NameError', `no binding for nonlocal '${name}' found`);
+      }
+      // Debug: log the scope chain
+      if (process.env.DEBUG_NONLOCAL) {
+        console.log(`Setting nonlocal ${name} = ${value}`);
+        console.log(`Found scope:`, scope.values.has(name), scope.values.get(name));
       }
       scope.values.set(name, value);
       return;
@@ -80,14 +105,16 @@ export class Scope {
     return scope;
   }
 
-  findScopeWith(name: string): Scope | null {
-    let scope: Scope | null = this;
+  findScopeWith(name: string, skipBase: boolean = false): Scope | null {
+    let scope: Scope | null = skipBase ? this.parent : this;
     while (scope) {
-      if (scope.values.has(name)) return scope;
-      scope = scope.parent;
-      while (scope && scope.isClassScope) {
+      if (scope.isClassScope) {
         scope = scope.parent;
+        continue;
       }
+      if (scope.values.has(name)) return scope;
+      if (scope.locals.has(name)) return scope;
+      scope = scope.parent;
     }
     return null;
   }
@@ -98,7 +125,9 @@ export class PyFunction {
   params: any[];
   body: any[];
   closure: Scope;
+  closure_shared_values?: Map<string, any>;
   isGenerator: boolean;
+  bytecode?: any; // ByteCode
   localNames: Set<string>;
 
   constructor(
@@ -107,7 +136,8 @@ export class PyFunction {
     body: any[],
     closure: Scope,
     isGenerator: boolean,
-    localNames: Set<string> = new Set()
+    localNames: Set<string> = new Set(),
+    bytecode?: any
   ) {
     this.name = name;
     this.params = params;
@@ -115,6 +145,7 @@ export class PyFunction {
     this.closure = closure;
     this.isGenerator = isGenerator;
     this.localNames = localNames;
+    this.bytecode = bytecode;
   }
 }
 
@@ -163,6 +194,29 @@ export class PyGenerator {
       throw new PyException('StopIteration', 'StopIteration');
     }
     return result.value;
+  }
+
+  throw(exc: any) {
+    const it: any = this.iterator as any;
+    if (exc instanceof PyClass && exc.isException) {
+      exc = new PyInstance(exc);
+    }
+    if (typeof it.throw !== 'function') {
+      throw new PyException('TypeError', 'object is not an iterator');
+    }
+    const result = it.throw(exc);
+    if (result.done) {
+      throw new PyException('StopIteration', 'StopIteration');
+    }
+    return result.value;
+  }
+
+  close() {
+    const it: any = this.iterator as any;
+    if (typeof it.return === 'function') {
+      it.return(null);
+    }
+    return null;
   }
 
   [Symbol.iterator]() {
@@ -234,8 +288,8 @@ export class PyDict {
     }
   }
 
-  [Symbol.iterator](): IterableIterator<[any, any]> {
-    return this.entries();
+  [Symbol.iterator](): IterableIterator<any> {
+    return this.keys();
   }
 
   private keyInfo(key: any): { store: Map<any, DictEntry>; id: any } {
