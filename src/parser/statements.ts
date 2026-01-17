@@ -21,17 +21,30 @@ export function parseExpressionList(this: Parser): ASTNode {
 
 export function parseAssignmentOrExpression(this: Parser): ASTNode {
   const startPos = this.pos;
-  const target = this.parseTarget();
-  if (this.match(TokenType.ASSIGN)) {
-    this.consume();
-    const value = this.parseExpressionList();
-    return { type: ASTNodeType.ASSIGNMENT, targets: [target], value };
+  let target: ASTNode | null = null;
+
+  try {
+    target = this.parseTarget();
+  } catch (e) {
+    // If parsing as target fails, it might be a valid expression statement
   }
-  if (this.match(TokenType.OPERATOR) && ['+=', '-=', '*=', '/=', '%=', '//=', '**='].includes(this.peek()?.value || '')) {
-    const op = this.consume().value;
-    const value = this.parseExpressionList();
-    return { type: ASTNodeType.AUG_ASSIGNMENT, target, operator: op, value };
+
+  if (target) {
+    if (this.match(TokenType.ASSIGN)) {
+      this.consume();
+      const value = this.parseExpressionList();
+      return { type: ASTNodeType.ASSIGNMENT, targets: [target], value };
+    }
+    if (
+      this.match(TokenType.OPERATOR) &&
+      ['+=', '-=', '*=', '/=', '%=', '//=', '**='].includes(this.peek()?.value || '')
+    ) {
+      const op = this.consume().value;
+      const value = this.parseExpressionList();
+      return { type: ASTNodeType.AUG_ASSIGNMENT, target, operator: op, value };
+    }
   }
+
   this.pos = startPos;
   return this.parseExpressionStatement();
 }

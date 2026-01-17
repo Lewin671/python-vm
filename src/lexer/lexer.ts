@@ -17,6 +17,7 @@ export class Lexer {
   }
 
   tokenize(): Token[] {
+    let bracketLevel = 0;
     // Helper function to create a token
     const createToken = (type: TokenType, value: string): Token => ({
       type,
@@ -44,11 +45,15 @@ export class Lexer {
     const emitIndentTokens = (indent: number) => {
       const currentIndent = this.indentStack[this.indentStack.length - 1];
       if (indent > currentIndent) {
-        this.tokens.push(createToken(TokenType.INDENT, ''));
+        if (bracketLevel === 0) {
+          this.tokens.push(createToken(TokenType.INDENT, ''));
+        }
         this.indentStack.push(indent);
       } else if (indent < currentIndent) {
         while (indent < this.indentStack[this.indentStack.length - 1]) {
-          this.tokens.push(createToken(TokenType.DEDENT, ''));
+          if (bracketLevel === 0) {
+            this.tokens.push(createToken(TokenType.DEDENT, ''));
+          }
           this.indentStack.pop();
         }
         if (indent !== this.indentStack[this.indentStack.length - 1]) {
@@ -67,7 +72,9 @@ export class Lexer {
         }
 
         if (peek() === '\n') {
-          this.tokens.push(createToken(TokenType.NEWLINE, '\n'));
+          if (bracketLevel === 0) {
+            this.tokens.push(createToken(TokenType.NEWLINE, '\n'));
+          }
           advance();
           this.atLineStart = true;
           continue;
@@ -103,7 +110,9 @@ export class Lexer {
       }
 
       if (char === '\n') {
-        this.tokens.push(createToken(TokenType.NEWLINE, '\n'));
+        if (bracketLevel === 0) {
+          this.tokens.push(createToken(TokenType.NEWLINE, '\n'));
+        }
         advance();
         this.atLineStart = true;
         continue;
@@ -342,26 +351,32 @@ export class Lexer {
         case '(':
           this.tokens.push(createToken(TokenType.LPAREN, '('));
           advance();
+          bracketLevel++;
           break;
         case ')':
           this.tokens.push(createToken(TokenType.RPAREN, ')'));
           advance();
+          bracketLevel--;
           break;
         case '[':
           this.tokens.push(createToken(TokenType.LBRACKET, '['));
           advance();
+          bracketLevel++;
           break;
         case ']':
           this.tokens.push(createToken(TokenType.RBRACKET, ']'));
           advance();
+          bracketLevel--;
           break;
         case '{':
           this.tokens.push(createToken(TokenType.LBRACE, '{'));
           advance();
+          bracketLevel++;
           break;
         case '}':
           this.tokens.push(createToken(TokenType.RBRACE, '}'));
           advance();
+          bracketLevel--;
           break;
         case ':':
           this.tokens.push(createToken(TokenType.COLON, ':'));
