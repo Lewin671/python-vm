@@ -39,12 +39,18 @@ export function installBuiltins(this: VirtualMachine, scope: Scope) {
       end = toNumber(args[1]);
       step = toNumber(args[2]);
     }
-    const result: number[] = [];
     if (step === 0) throw new PyException('ValueError', 'range() arg 3 must not be zero');
+    
+    // Pre-calculate size and pre-allocate array for better performance
+    const size = step > 0 ? Math.max(0, Math.ceil((end - start) / step)) : Math.max(0, Math.ceil((end - start) / step));
+    const result = new Array(size);
+    
     if (step > 0) {
-      for (let i = start; i < end; i += step) result.push(i);
+      let idx = 0;
+      for (let i = start; i < end; i += step) result[idx++] = i;
     } else {
-      for (let i = start; i > end; i += step) result.push(i);
+      let idx = 0;
+      for (let i = start; i > end; i += step) result[idx++] = i;
     }
     return result;
   });

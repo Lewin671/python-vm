@@ -387,6 +387,15 @@ export class PySet {
   }
 
   add(value: PyValue): this {
+    // Fast path for strings
+    if (typeof value === 'string') {
+      const id = `s:${value}`;
+      if (!this.primitiveStore.has(id)) {
+        this.primitiveStore.set(id, value);
+      }
+      return this;
+    }
+    
     const info = this.valueInfo(value);
     if (!info.store.has(info.id)) {
       info.store.set(info.id, value);
@@ -395,11 +404,21 @@ export class PySet {
   }
 
   has(value: PyValue): boolean {
+    // Fast path for strings
+    if (typeof value === 'string') {
+      return this.primitiveStore.has(`s:${value}`);
+    }
+    
     const info = this.valueInfo(value);
     return info.store.has(info.id);
   }
 
   delete(value: PyValue): boolean {
+    // Fast path for strings
+    if (typeof value === 'string') {
+      return this.primitiveStore.delete(`s:${value}`);
+    }
+    
     const info = this.valueInfo(value);
     return info.store.delete(info.id);
   }
