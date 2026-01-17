@@ -5,7 +5,7 @@
 
 import { Lexer } from './lexer';
 import { Parser } from './parser';
-import { Compiler } from './compiler_module';
+import { Compiler } from './compiler';
 import { PyValue, VirtualMachine } from './vm';
 import * as path from 'path';
 

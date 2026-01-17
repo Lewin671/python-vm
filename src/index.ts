@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 
-import { PythonCompiler } from './compiler';
+import { PythonCompiler } from './python_compiler';
 import * as fs from 'fs';
 
 // 导出公共 API
