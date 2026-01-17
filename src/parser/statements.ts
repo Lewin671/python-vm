@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Parser } from './parser';
 import { ASTNode, ASTNodeType, TokenType } from '../types';
 
@@ -23,6 +24,7 @@ export function parseAssignmentOrExpression(this: Parser): ASTNode {
   const startPos = this.pos;
   const targets: ASTNode[] = [];
 
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     const mark = this.pos;
     try {
@@ -33,7 +35,7 @@ export function parseAssignmentOrExpression(this: Parser): ASTNode {
         continue;
       }
     } catch (e) {
-      // Not a target or no assignment
+      // Not a target or no assignment - expected in this flow
     }
     this.pos = mark;
     break;
@@ -48,7 +50,9 @@ export function parseAssignmentOrExpression(this: Parser): ASTNode {
   let target: ASTNode | null = null;
   try {
     target = this.parseTarget();
-  } catch (e) {}
+  } catch (e) {
+    // Failed to parse as target - this is expected
+  }
 
   if (target) {
     if (
@@ -121,6 +125,7 @@ export function parseForStatement(this: Parser): ASTNode {
 export function parseFunctionParameters(this: Parser): ASTNode[] {
   const params: ASTNode[] = [];
   if (!this.match(TokenType.RPAREN)) {
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (this.match(TokenType.OPERATOR, '*')) {
         this.consume();
@@ -161,7 +166,7 @@ export function parseFunctionDef(this: Parser, decorators: ASTNode[] = []): ASTN
 export function parseClassDef(this: Parser, decorators: ASTNode[] = []): ASTNode {
   this.expect(TokenType.KEYWORD, 'class');
   const name = this.expect(TokenType.IDENTIFIER).value;
-  let bases: ASTNode[] = [];
+  const bases: ASTNode[] = [];
   if (this.match(TokenType.LPAREN)) {
     this.consume();
     if (!this.match(TokenType.RPAREN)) {
@@ -228,6 +233,7 @@ export function parseTryStatement(this: Parser): ASTNode {
 export function parseWithStatement(this: Parser): ASTNode {
   this.expect(TokenType.KEYWORD, 'with');
   const items: any[] = [];
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     const context = this.parseExpression();
     let target: ASTNode | null = null;

@@ -3,13 +3,13 @@ import * as path from 'path';
 import type { VirtualMachine } from './vm';
 import { Lexer } from '../lexer';
 import { Parser } from '../parser';
-import { PyException, PyFunction, PyGenerator, Scope } from './runtime-types';
+import { PyValue, PyException, PyFunction, PyGenerator, Scope } from './runtime-types';
 
-export function importModule(this: VirtualMachine, name: string, scope: Scope): any {
+export function importModule(this: VirtualMachine, name: string, scope: Scope): PyValue {
   if (this.moduleCache.has(name)) {
     return this.moduleCache.get(name);
   }
-  let module: any;
+  let module: PyValue;
   if (name === 'asyncio') {
     module = this.createAsyncioModule(scope);
   } else {
@@ -19,10 +19,10 @@ export function importModule(this: VirtualMachine, name: string, scope: Scope): 
   return module;
 }
 
-export function createAsyncioModule(this: VirtualMachine, scope: Scope): any {
+export function createAsyncioModule(this: VirtualMachine, scope: Scope): PyValue {
   return {
     __name__: 'asyncio',
-    run: (value: any) => {
+    run: (value: PyValue) => {
       if (value instanceof PyFunction) {
         return this.callFunction(value, [], scope);
       }
@@ -34,7 +34,7 @@ export function createAsyncioModule(this: VirtualMachine, scope: Scope): any {
   };
 }
 
-export function loadModuleFromFile(this: VirtualMachine, name: string, scope: Scope): any {
+export function loadModuleFromFile(this: VirtualMachine, name: string, scope: Scope): PyValue {
   const modulePath = this.resolveModulePath(name);
   if (!modulePath) {
     throw new PyException('ImportError', `No module named '${name}'`);
@@ -46,7 +46,7 @@ export function loadModuleFromFile(this: VirtualMachine, name: string, scope: Sc
   const ast = parser.parse();
   const moduleScope = new Scope(scope.root());
   moduleScope.set('__name__', name);
-  this.executeBlock(ast.body, moduleScope);
+  this.executeBlock(ast['body'], moduleScope);
   return { __name__: name, __moduleScope__: moduleScope };
 }
 

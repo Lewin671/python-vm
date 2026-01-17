@@ -12,7 +12,7 @@ export const parseStringToken = (tokenValue: string): { value: string; isFString
   }
   const inner = raw.slice(1, -1);
   return {
-    value: inner.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\\"/g, '"').replace(/\\'/g, "'"),
+    value: inner.replace(/\\n/g, '\n').replace(/\\t/g, '\t').replace(/\\"/g, '"').replace(/\\'/g, "'"),
     isFString,
   };
 };

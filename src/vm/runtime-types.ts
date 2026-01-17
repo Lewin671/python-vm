@@ -1,11 +1,17 @@
 import * as fs from 'fs';
 import { ByteCode } from '../types';
 
-export type ScopeValue = any;
+/**
+ * Represents any Python value in the VM.
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type PyValue = any;
+
+export type ScopeValue = PyValue;
 
 export class ReturnSignal {
-  value: any;
-  constructor(value: any) {
+  value: PyValue;
+  constructor(value: PyValue) {
     this.value = value;
   }
 }
@@ -15,8 +21,8 @@ export class ContinueSignal { }
 
 export class PyException extends Error {
   pyType: string;
-  pyValue: any;
-  constructor(pyType: string, message?: string, pyValue?: any) {
+  pyValue: PyValue;
+  constructor(pyType: string, message?: string, pyValue?: PyValue) {
     super(message || pyType);
     this.pyType = pyType;
     this.pyValue = pyValue;
@@ -24,11 +30,11 @@ export class PyException extends Error {
 }
 
 export class Frame {
-  public stack: any[] = [];
+  public stack: PyValue[] = [];
   public pc: number = 0;
   public scope: Scope;
   public bytecode: ByteCode;
-  public locals: any[] = [];
+  public locals: PyValue[] = [];
   public blockStack: Array<{ handler: number; stackHeight: number }> = [];
 
   constructor(bytecode: ByteCode, scope: Scope) {
@@ -64,12 +70,12 @@ export class Scope {
       // If we found a scope, return the actual reference from its Map
       if (scope) return scope.values.get(name);
     }
-    
+
     let p: Scope | null = this.parent;
     while (p && p.isClassScope) {
       p = p.parent;
     }
-    
+
     if (p) {
       return p.get(name);
     }
@@ -87,7 +93,7 @@ export class Scope {
         throw new PyException('NameError', `no binding for nonlocal '${name}' found`);
       }
       // Debug: log the scope chain
-      if (process.env.DEBUG_NONLOCAL) {
+      if (process.env['DEBUG_NONLOCAL']) {
         console.log(`Setting nonlocal ${name} = ${value}`);
         console.log(`Found scope:`, scope.values.has(name), scope.values.get(name));
       }
@@ -98,14 +104,16 @@ export class Scope {
   }
 
   root(): Scope {
-    let scope: Scope = this;
-    while (scope.parent) {
-      scope = scope.parent;
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
+    let current: Scope = this;
+    while (current.parent) {
+      current = current.parent;
     }
-    return scope;
+    return current;
   }
 
   findScopeWith(name: string, skipBase: boolean = false): Scope | null {
+    // eslint-disable-next-line @typescript-eslint/no-this-alias
     let scope: Scope | null = skipBase ? this.parent : this;
     while (scope) {
       if (scope.isClassScope) {
@@ -122,22 +130,22 @@ export class Scope {
 
 export class PyFunction {
   name: string;
-  params: any[];
-  body: any[];
+  params: PyValue[];
+  body: PyValue[];
   closure: Scope;
-  closure_shared_values?: Map<string, any>;
+  closure_shared_values?: Map<string, PyValue>;
   isGenerator: boolean;
-  bytecode?: any; // ByteCode
+  bytecode?: ByteCode;
   localNames: Set<string>;
 
   constructor(
     name: string,
-    params: any[],
-    body: any[],
+    params: PyValue[],
+    body: PyValue[],
     closure: Scope,
     isGenerator: boolean,
     localNames: Set<string> = new Set(),
-    bytecode?: any
+    bytecode?: ByteCode
   ) {
     this.name = name;
     this.params = params;
@@ -145,17 +153,17 @@ export class PyFunction {
     this.closure = closure;
     this.isGenerator = isGenerator;
     this.localNames = localNames;
-    this.bytecode = bytecode;
+    if (bytecode !== undefined) this.bytecode = bytecode;
   }
 }
 
 export class PyClass {
   name: string;
   bases: PyClass[];
-  attributes: Map<string, any>;
+  attributes: Map<string, PyValue>;
   isException: boolean;
 
-  constructor(name: string, bases: PyClass[], attributes: Map<string, any>, isException: boolean = false) {
+  constructor(name: string, bases: PyClass[], attributes: Map<string, PyValue>, isException: boolean = false) {
     this.name = name;
     this.bases = bases;
     this.attributes = attributes;
@@ -165,7 +173,7 @@ export class PyClass {
 
 export class PyInstance {
   klass: PyClass;
-  attributes: Map<string, any>;
+  attributes: Map<string, PyValue>;
 
   constructor(klass: PyClass) {
     this.klass = klass;
@@ -174,13 +182,13 @@ export class PyInstance {
 }
 
 export class PyGenerator {
-  private iterator: Generator<any, any, any>;
+  private iterator: Generator<PyValue>;
 
-  constructor(iterator: Generator<any, any, any>) {
+  constructor(iterator: Generator<PyValue>) {
     this.iterator = iterator;
   }
 
-  next(value?: any) {
+  next(value?: PyValue) {
     const result = this.iterator.next(value === undefined ? null : value);
     if (result.done) {
       throw new PyException('StopIteration', 'StopIteration');
@@ -188,7 +196,7 @@ export class PyGenerator {
     return result.value;
   }
 
-  send(value?: any) {
+  send(value?: PyValue) {
     const result = this.iterator.next(value === undefined ? null : value);
     if (result.done) {
       throw new PyException('StopIteration', 'StopIteration');
@@ -196,15 +204,15 @@ export class PyGenerator {
     return result.value;
   }
 
-  throw(exc: any) {
-    const it: any = this.iterator as any;
+  throw(exc: PyValue) {
+    const it = this.iterator;
     if (exc instanceof PyClass && exc.isException) {
       exc = new PyInstance(exc);
     }
     if (typeof it.throw !== 'function') {
       throw new PyException('TypeError', 'object is not an iterator');
     }
-    const result = it.throw(exc);
+    const result = (it as unknown as { throw: (e: PyValue) => { done: boolean; value: PyValue } }).throw(exc);
     if (result.done) {
       throw new PyException('StopIteration', 'StopIteration');
     }
@@ -212,9 +220,9 @@ export class PyGenerator {
   }
 
   close() {
-    const it: any = this.iterator as any;
-    if (typeof it.return === 'function') {
-      it.return(null);
+    const it = this.iterator;
+    if (typeof (it as unknown as { return?: (v: PyValue) => void }).return === 'function') {
+      (it as unknown as { return: (v: PyValue) => void }).return(null);
     }
     return null;
   }
@@ -224,17 +232,17 @@ export class PyGenerator {
   }
 }
 
-export type DictEntry = { key: any; value: any };
+export type DictEntry = { key: PyValue; value: PyValue };
 
 export class PyDict {
   private primitiveStore: Map<string, DictEntry> = new Map();
-  private objectStore: Map<any, DictEntry> = new Map();
+  private objectStore: Map<unknown, DictEntry> = new Map();
 
   get size(): number {
     return this.primitiveStore.size + this.objectStore.size;
   }
 
-  set(key: any, value: any): this {
+  set(key: PyValue, value: PyValue): this {
     const info = this.keyInfo(key);
     const existing = info.store.get(info.id);
     if (existing) {
@@ -245,32 +253,32 @@ export class PyDict {
     return this;
   }
 
-  get(key: any): any {
+  get(key: PyValue): PyValue {
     const info = this.keyInfo(key);
     const entry = info.store.get(info.id);
     return entry ? entry.value : undefined;
   }
 
-  has(key: any): boolean {
+  has(key: PyValue): boolean {
     const info = this.keyInfo(key);
     return info.store.has(info.id);
   }
 
-  delete(key: any): boolean {
+  delete(key: PyValue): boolean {
     const info = this.keyInfo(key);
     return info.store.delete(info.id);
   }
 
-  *entries(): IterableIterator<[any, any]> {
+  *entries(): IterableIterator<[PyValue, PyValue]> {
     for (const entry of this.primitiveStore.values()) {
-      yield [entry.key, entry.value];
+      yield [entry.key, entry.value] as [PyValue, PyValue];
     }
     for (const entry of this.objectStore.values()) {
-      yield [entry.key, entry.value];
+      yield [entry.key, entry.value] as [PyValue, PyValue];
     }
   }
 
-  *keys(): IterableIterator<any> {
+  *keys(): IterableIterator<PyValue> {
     for (const entry of this.primitiveStore.values()) {
       yield entry.key;
     }
@@ -279,7 +287,7 @@ export class PyDict {
     }
   }
 
-  *values(): IterableIterator<any> {
+  *values(): IterableIterator<PyValue> {
     for (const entry of this.primitiveStore.values()) {
       yield entry.value;
     }
@@ -288,11 +296,11 @@ export class PyDict {
     }
   }
 
-  [Symbol.iterator](): IterableIterator<any> {
+  [Symbol.iterator](): IterableIterator<PyValue> {
     return this.keys();
   }
 
-  private keyInfo(key: any): { store: Map<any, DictEntry>; id: any } {
+  private keyInfo(key: PyValue): { store: Map<unknown, DictEntry>; id: unknown } {
     const numeric = this.normalizeNumericKey(key);
     if (numeric !== null) {
       if (typeof numeric === 'number' && Number.isNaN(numeric)) {
@@ -312,7 +320,7 @@ export class PyDict {
     return { store: this.objectStore, id: key };
   }
 
-  private normalizeNumericKey(key: any): number | bigint | null {
+  private normalizeNumericKey(key: PyValue): number | bigint | null {
     if (typeof key === 'boolean') return key ? 1n : 0n;
     if (typeof key === 'bigint') return key;
     if (typeof key === 'number' || key instanceof Number) {
@@ -325,10 +333,10 @@ export class PyDict {
 }
 
 export class PySet {
-  private primitiveStore: Map<string, any> = new Map();
-  private objectStore: Map<any, any> = new Map();
+  private primitiveStore: Map<string, PyValue> = new Map();
+  private objectStore: Map<unknown, PyValue> = new Map();
 
-  constructor(iterable?: Iterable<any>) {
+  constructor(iterable?: Iterable<PyValue>) {
     if (iterable) {
       for (const item of iterable) {
         this.add(item);
@@ -340,7 +348,7 @@ export class PySet {
     return this.primitiveStore.size + this.objectStore.size;
   }
 
-  add(value: any): this {
+  add(value: PyValue): this {
     const info = this.valueInfo(value);
     if (!info.store.has(info.id)) {
       info.store.set(info.id, value);
@@ -348,12 +356,12 @@ export class PySet {
     return this;
   }
 
-  has(value: any): boolean {
+  has(value: PyValue): boolean {
     const info = this.valueInfo(value);
     return info.store.has(info.id);
   }
 
-  delete(value: any): boolean {
+  delete(value: PyValue): boolean {
     const info = this.valueInfo(value);
     return info.store.delete(info.id);
   }
@@ -363,7 +371,7 @@ export class PySet {
     this.objectStore.clear();
   }
 
-  *values(): IterableIterator<any> {
+  *values(): IterableIterator<PyValue> {
     for (const value of this.primitiveStore.values()) {
       yield value;
     }
@@ -372,11 +380,11 @@ export class PySet {
     }
   }
 
-  [Symbol.iterator](): IterableIterator<any> {
+  [Symbol.iterator](): IterableIterator<PyValue> {
     return this.values();
   }
 
-  private valueInfo(value: any): { store: Map<any, any>; id: any } {
+  private valueInfo(value: PyValue): { store: Map<unknown, unknown>; id: unknown } {
     const numeric = this.normalizeNumeric(value);
     if (numeric !== null) {
       if (typeof numeric === 'number' && Number.isNaN(numeric)) {
@@ -396,7 +404,7 @@ export class PySet {
     return { store: this.objectStore, id: value };
   }
 
-  private normalizeNumeric(value: any): number | bigint | null {
+  private normalizeNumeric(value: PyValue): number | bigint | null {
     if (typeof value === 'boolean') return value ? 1n : 0n;
     if (typeof value === 'bigint') return value;
     if (typeof value === 'number' || value instanceof Number) {

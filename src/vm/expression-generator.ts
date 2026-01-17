@@ -1,7 +1,8 @@
 import type { VirtualMachine } from './vm';
 import { ASTNodeType } from '../types';
+import { PyValue } from './runtime-types';
 
-export function* evaluateExpressionGenerator(this: VirtualMachine, node: any, scope: any): Generator<any, any, any> {
+export function* evaluateExpressionGenerator(this: VirtualMachine, node: PyValue, scope: PyValue): Generator<PyValue, PyValue> {
   switch (node.type) {
     case ASTNodeType.YIELD: {
       const value = node.value ? yield* this.evaluateExpressionGenerator(node.value, scope) : null;
@@ -27,8 +28,8 @@ export function* evaluateExpressionGenerator(this: VirtualMachine, node: any, sc
     }
     case ASTNodeType.CALL: {
       const callee = yield* this.evaluateExpressionGenerator(node.callee, scope);
-      const positional: any[] = [];
-      const kwargs: Record<string, any> = {};
+      const positional: PyValue[] = [];
+      const kwargs: Record<string, PyValue> = {};
       for (const arg of node.args) {
         if (arg.type === 'KeywordArg') {
           kwargs[arg.name] = yield* this.evaluateExpressionGenerator(arg.value, scope);

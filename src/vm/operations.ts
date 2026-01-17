@@ -1,31 +1,29 @@
 import type { VirtualMachine } from './vm';
 import { ASTNodeType } from '../types';
-import { PyClass, PyDict, PyException, PyFile, PyFunction, PyGenerator, PyInstance, PySet, Scope } from './runtime-types';
+import { PyValue, PyClass, PyDict, PyException, PyFile, PyFunction, PyGenerator, PyInstance, PySet, Scope } from './runtime-types';
 import {
   bigIntFloorDiv,
   isComplex,
   isFloatLike,
   isIntLike,
   isNumericLike,
-  numericEquals,
   pythonModulo,
   shouldUseBigInt,
   toBigIntValue,
   toComplex,
   toNumber,
   pyStr,
-  pyTypeName,
 } from './value-utils';
 
-export function applyInPlaceBinary(this: VirtualMachine, op: string, left: any, right: any): any {
-  if (op === '+' && Array.isArray(left) && !(left as any).__tuple__ && Array.isArray(right)) {
+export function applyInPlaceBinary(this: VirtualMachine, op: string, left: PyValue, right: PyValue): PyValue {
+  if (op === '+' && Array.isArray(left) && !(left as PyValue).__tuple__ && Array.isArray(right)) {
     left.push(...right);
     return left;
   }
   return this.applyBinary(op, left, right);
 }
 
-export function applyBinary(this: VirtualMachine, op: string, left: any, right: any): any {
+export function applyBinary(this: VirtualMachine, op: string, left: PyValue, right: PyValue): PyValue {
   if (isComplex(left) || isComplex(right)) {
     const a = toComplex(left);
     const b = toComplex(right);
@@ -48,8 +46,8 @@ export function applyBinary(this: VirtualMachine, op: string, left: any, right: 
     case '+':
       if (Array.isArray(left) && Array.isArray(right)) {
         const result = [...left, ...right];
-        if ((left as any).__tuple__ && (right as any).__tuple__) {
-          (result as any).__tuple__ = true;
+        if ((left as PyValue).__tuple__ && (right as PyValue).__tuple__) {
+          (result as PyValue).__tuple__ = true;
         }
         return result;
       }
@@ -87,15 +85,15 @@ export function applyBinary(this: VirtualMachine, op: string, left: any, right: 
       if (Array.isArray(left) && isIntLike(right)) {
         const count = toNumber(right);
         if (count <= 0) {
-          const result: any[] = [];
-          if ((left as any).__tuple__) {
-            (result as any).__tuple__ = true;
+          const result: PyValue[] = [];
+          if ((left as PyValue).__tuple__) {
+            (result as PyValue).__tuple__ = true;
           }
           return result;
         }
         const result = Array(count).fill(null).flatMap(() => left);
-        if ((left as any).__tuple__) {
-          (result as any).__tuple__ = true;
+        if ((left as PyValue).__tuple__) {
+          (result as PyValue).__tuple__ = true;
         }
         return result;
       }
@@ -193,7 +191,7 @@ export function applyBinary(this: VirtualMachine, op: string, left: any, right: 
   }
 }
 
-export function formatPercent(this: VirtualMachine, format: string, value: any): string {
+export function formatPercent(this: VirtualMachine, format: string, value: PyValue): string {
   const values = Array.isArray(value) ? value : [value];
   let index = 0;
   return format.replace(/%[sdfo]/g, (match) => {
@@ -204,18 +202,18 @@ export function formatPercent(this: VirtualMachine, format: string, value: any):
   });
 }
 
-export function getSubscript(this: VirtualMachine, obj: any, index: any): any {
+export function getSubscript(this: VirtualMachine, obj: PyValue, index: PyValue): PyValue {
   // Check if index is a slice object (created by BUILD_SLICE opcode or AST node)
   if (index && (index.type === ASTNodeType.SLICE || index.__slice__)) {
     const start = index.start !== undefined ? index.start : null;
     const end = index.end !== undefined ? index.end : null;
     const step = index.step !== undefined ? index.step : 1;
     const indices = this.computeSliceIndices(obj.length, start, end, step);
-    const result: any[] = [];
+    const result: PyValue[] = [];
     for (const idx of indices) result.push(obj[idx]);
     if (typeof obj === 'string') return result.join('');
-    if (Array.isArray(obj) && (obj as any).__tuple__) {
-      (result as any).__tuple__ = true;
+    if (Array.isArray(obj) && (obj as PyValue).__tuple__) {
+      (result as PyValue).__tuple__ = true;
     }
     return result;
   }
@@ -235,7 +233,7 @@ export function getSubscript(this: VirtualMachine, obj: any, index: any): any {
   return null;
 }
 
-export function computeSliceBounds(this: VirtualMachine, length: number, start: any, end: any, step: any) {
+export function computeSliceBounds(this: VirtualMachine, length: number, start: PyValue, end: PyValue, step: PyValue) {
   const stepValue = this.normalizeSliceStep(step);
   const startProvided = start !== null && start !== undefined;
   const endProvided = end !== null && end !== undefined;
@@ -248,7 +246,7 @@ export function computeSliceBounds(this: VirtualMachine, length: number, start: 
   return { start: startValue, end: endValue, step: stepValue };
 }
 
-export function computeSliceIndices(this: VirtualMachine, length: number, start: any, end: any, step: any) {
+export function computeSliceIndices(this: VirtualMachine, length: number, start: PyValue, end: PyValue, step: PyValue) {
   const bounds = this.computeSliceBounds(length, start, end, step);
   const indices: number[] = [];
   for (let i = bounds.start; bounds.step > 0 ? i < bounds.end : i > bounds.end; i += bounds.step) {
@@ -257,7 +255,7 @@ export function computeSliceIndices(this: VirtualMachine, length: number, start:
   return indices;
 }
 
-export function normalizeSliceStep(step: any) {
+export function normalizeSliceStep(step: PyValue) {
   const stepValue = step !== null && step !== undefined ? toNumber(step) : 1;
   if (stepValue === 0) {
     throw new PyException('ValueError', 'slice step cannot be zero');
@@ -265,7 +263,7 @@ export function normalizeSliceStep(step: any) {
   return stepValue;
 }
 
-export function getAttribute(this: VirtualMachine, obj: any, name: string, scope: Scope): any {
+export function getAttribute(this: VirtualMachine, obj: PyValue, name: string, scope: Scope): PyValue {
   if (obj && obj.__moduleScope__) {
     if (obj.__moduleScope__.values.has(name)) {
       return obj.__moduleScope__.values.get(name);
@@ -275,7 +273,7 @@ export function getAttribute(this: VirtualMachine, obj: any, name: string, scope
     if (obj.attributes.has(name)) return obj.attributes.get(name);
     const attr = this.findClassAttribute(obj.klass, name);
     if (attr instanceof PyFunction) {
-      return (...args: any[]) => this.callFunction(attr, [obj, ...args], scope);
+      return (...args: PyValue[]) => this.callFunction(attr, [obj, ...args], scope);
     }
     return attr;
   }
@@ -284,12 +282,12 @@ export function getAttribute(this: VirtualMachine, obj: any, name: string, scope
     return attr;
   }
   if (obj instanceof PyFile) {
-    const value = (obj as any)[name];
+    const value = (obj as PyValue)[name];
     if (typeof value === 'function') return value.bind(obj);
     return value;
   }
   if (obj instanceof PyGenerator) {
-    const value = (obj as any)[name];
+    const value = (obj as PyValue)[name];
     if (typeof value === 'function') return value.bind(obj);
     return value;
   }
@@ -299,17 +297,17 @@ export function getAttribute(this: VirtualMachine, obj: any, name: string, scope
   }
   if (typeof obj === 'string') {
     if (name === 'upper') return () => obj.toUpperCase();
-    if (name === 'join') return (iterable: any) => {
+    if (name === 'join') return (iterable: PyValue) => {
       const arr = Array.isArray(iterable) ? iterable : Array.from(iterable);
       return arr.map(item => pyStr(item)).join(obj);
     };
     if (name === 'replace')
-      return (a: any, b: any) => {
+      return (a: PyValue, b: PyValue) => {
         return obj.replace(a, b);
       };
     if (name === 'format')
-      return (...args: any[]) => {
-        let kwargs: Record<string, any> = {};
+      return (...args: PyValue[]) => {
+        let kwargs: Record<string, PyValue> = {};
         if (args.length > 0) {
           const last = args[args.length - 1];
           if (last && last.__kwargs__) {
@@ -333,7 +331,7 @@ export function getAttribute(this: VirtualMachine, obj: any, name: string, scope
           return '';
         });
       };
-    if (name === 'count') return (ch: any) => obj.split(ch).length - 1;
+    if (name === 'count') return (ch: PyValue) => obj.split(ch).length - 1;
     if (name === 'split') return (sep: string = ' ') => obj.split(sep);
     if (name === 'strip') return () => obj.trim();
     if (name === 'lower') return () => obj.toLowerCase();
@@ -342,7 +340,7 @@ export function getAttribute(this: VirtualMachine, obj: any, name: string, scope
   }
   if (Array.isArray(obj)) {
     if (name === 'append')
-      return (value: any) => {
+      return (value: PyValue) => {
         obj.push(value);
         return null;
       };
@@ -350,16 +348,16 @@ export function getAttribute(this: VirtualMachine, obj: any, name: string, scope
       if (index === undefined) return obj.pop();
       return obj.splice(index, 1)[0];
     };
-    if (name === 'extend') return (iterable: any) => {
+    if (name === 'extend') return (iterable: PyValue) => {
       const arr = Array.isArray(iterable) ? iterable : Array.from(iterable);
       obj.push(...arr);
       return null;
     };
-    if (name === 'count') return (value: any) => obj.filter((item: any) => item === value).length;
-    if (name === 'index') return (value: any) => obj.indexOf(value);
+    if (name === 'count') return (value: PyValue) => obj.filter((item: PyValue) => item === value).length;
+    if (name === 'index') return (value: PyValue) => obj.indexOf(value);
     if (name === 'sort') {
-      return (...args: any[]) => {
-        let kwargs: Record<string, any> = {};
+      return (...args: PyValue[]) => {
+        let kwargs: Record<string, PyValue> = {};
         if (args.length > 0) {
           const last = args[args.length - 1];
           if (last && last.__kwargs__) {
@@ -368,8 +366,8 @@ export function getAttribute(this: VirtualMachine, obj: any, name: string, scope
           }
         }
         let keyFn = args.length > 0 ? args[0] : null;
-        if ('key' in kwargs) keyFn = kwargs.key;
-        const reverse = 'reverse' in kwargs ? Boolean(kwargs.reverse) : false;
+        if ('key' in kwargs) keyFn = kwargs['key'];
+        const reverse = 'reverse' in kwargs ? Boolean(kwargs['reverse']) : false;
 
         const initialLength = obj.length;
         if (keyFn) {
@@ -393,8 +391,8 @@ export function getAttribute(this: VirtualMachine, obj: any, name: string, scope
           }
           obj.length = 0;
           obj.push(...keyed.map((entry) => entry.item));
-        } else if (obj.every((value: any) => isNumericLike(value))) {
-          obj.sort((a: any, b: any) => toNumber(a) - toNumber(b));
+        } else if (obj.every((value: PyValue) => isNumericLike(value))) {
+          obj.sort((a: PyValue, b: PyValue) => toNumber(a) - toNumber(b));
           if (obj.length !== initialLength) {
             throw new PyException('ValueError', 'list modified during sort');
           }
@@ -414,27 +412,27 @@ export function getAttribute(this: VirtualMachine, obj: any, name: string, scope
       return () =>
         Array.from(obj.entries()).map(([k, v]) => {
           const tup = [k, v];
-          (tup as any).__tuple__ = true;
+          (tup as PyValue).__tuple__ = true;
           return tup;
         });
-    const value = (obj as any)[name];
+    const value = (obj as PyValue)[name];
     if (typeof value === 'function') return value.bind(obj);
     return value;
   }
   if (obj instanceof PySet) {
     if (name === 'add')
-      return (value: any) => {
+      return (value: PyValue) => {
         obj.add(value);
         return null;
       };
     if (name === 'update')
-      return (values: any) => {
+      return (values: PyValue) => {
         const items = Array.isArray(values) ? values : Array.from(values);
         for (const item of items) obj.add(item);
         return null;
       };
     if (name === 'remove')
-      return (value: any) => {
+      return (value: PyValue) => {
         obj.delete(value);
         return null;
       };
@@ -445,10 +443,10 @@ export function getAttribute(this: VirtualMachine, obj: any, name: string, scope
   if (obj && obj.__typeName__ === undefined && name === '__name__') {
     return obj.name;
   }
-  return (obj as any)[name];
+  return (obj as PyValue)[name];
 }
 
-export function setAttribute(this: VirtualMachine, obj: any, name: string, value: any) {
+export function setAttribute(this: VirtualMachine, obj: PyValue, name: string, value: PyValue) {
   if (obj && obj.__moduleScope__) {
     obj.__moduleScope__.values.set(name, value);
     return;
@@ -457,10 +455,10 @@ export function setAttribute(this: VirtualMachine, obj: any, name: string, value
     obj.attributes.set(name, value);
     return;
   }
-  (obj as any)[name] = value;
+  (obj as PyValue)[name] = value;
 }
 
-export function findClassAttribute(klass: PyClass, name: string): any {
+export function findClassAttribute(klass: PyClass, name: string): PyValue {
   if (klass.attributes.has(name)) return klass.attributes.get(name);
   for (const base of klass.bases) {
     const attr = findClassAttribute(base, name);

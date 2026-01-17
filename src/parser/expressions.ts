@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { Parser } from './parser';
 import { ASTNode, ASTNodeType, TokenType } from '../types';
 
@@ -34,6 +35,7 @@ export function parseIdentifier(this: Parser): ASTNode {
 export function parseArguments(this: Parser): ASTNode[] {
   const args: ASTNode[] = [];
   if (!this.match(TokenType.RPAREN)) {
+    // eslint-disable-next-line no-constant-condition
     while (true) {
       if (this.match(TokenType.OPERATOR, '*') || this.match(TokenType.OPERATOR, '**')) {
         const op = this.consume().value;
@@ -114,6 +116,7 @@ export function parsePattern(this: Parser): ASTNode {
 export function parseLambdaParameters(this: Parser): string[] {
   const params: string[] = [];
   if (this.match(TokenType.COLON)) return params;
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     if (this.match(TokenType.OPERATOR, '*')) {
       this.consume();
@@ -357,9 +360,10 @@ export function parseBitOr(this: Parser): ASTNode {
 }
 
 export function parseComparison(this: Parser): ASTNode {
-  let left = this.parseBitOr();
+  const left = this.parseBitOr();
   const operators: string[] = [];
   const comparators: ASTNode[] = [];
+  // eslint-disable-next-line no-constant-condition
   while (true) {
     if (this.match(TokenType.KEYWORD, 'not') && this.peek(1)?.type === TokenType.KEYWORD && this.peek(1)?.value === 'in') {
       this.consume();

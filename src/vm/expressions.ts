@@ -2,7 +2,7 @@ import type { VirtualMachine } from './vm';
 import { ASTNodeType } from '../types';
 import { Lexer } from '../lexer';
 import { Parser } from '../parser';
-import { PyClass, PyDict, PyException, PyFunction, PyGenerator, PyInstance, PySet, Scope } from './runtime-types';
+import { PyValue, PyDict, PyException, PyFunction, PyGenerator, PySet, Scope } from './runtime-types';
 import {
   isFloatObject,
   isIntObject,
@@ -14,7 +14,7 @@ import {
   toNumber,
 } from './value-utils';
 
-export function evaluateExpression(this: VirtualMachine, node: any, scope: Scope): any {
+export function evaluateExpression(this: VirtualMachine, node: PyValue, scope: Scope): PyValue {
   switch (node.type) {
     case ASTNodeType.NUMBER_LITERAL: {
       const raw = node.value;
@@ -49,9 +49,9 @@ export function evaluateExpression(this: VirtualMachine, node: any, scope: Scope
     case ASTNodeType.IDENTIFIER:
       return scope.get(node.name);
     case ASTNodeType.LIST_LITERAL:
-      return node.elements.map((el: any) => this.evaluateExpression(el, scope));
+      return node.elements.map((el: PyValue) => this.evaluateExpression(el, scope));
     case ASTNodeType.LIST_COMP: {
-      const result: any[] = [];
+      const result: PyValue[] = [];
       const compScope = new Scope(scope);
       this.evaluateComprehension(node.comprehension, compScope, () => {
         result.push(this.evaluateExpression(node.expression, compScope));
@@ -59,8 +59,8 @@ export function evaluateExpression(this: VirtualMachine, node: any, scope: Scope
       return result;
     }
     case ASTNodeType.TUPLE_LITERAL: {
-      const arr = node.elements.map((el: any) => this.evaluateExpression(el, scope));
-      (arr as any).__tuple__ = true;
+      const arr = node.elements.map((el: PyValue) => this.evaluateExpression(el, scope));
+      (arr as PyValue).__tuple__ = true;
       return arr;
     }
     case ASTNodeType.SET_COMP: {
@@ -72,7 +72,7 @@ export function evaluateExpression(this: VirtualMachine, node: any, scope: Scope
       return result;
     }
     case ASTNodeType.SET_LITERAL:
-      return new PySet(node.elements.map((el: any) => this.evaluateExpression(el, scope)));
+      return new PySet(node.elements.map((el: PyValue) => this.evaluateExpression(el, scope)));
     case ASTNodeType.DICT_LITERAL: {
       const entries = [];
       for (const entry of node.entries) {
@@ -96,17 +96,16 @@ export function evaluateExpression(this: VirtualMachine, node: any, scope: Scope
       return map;
     }
     case ASTNodeType.GENERATOR_EXPR: {
-      const self = this;
       const compScope = new Scope(scope);
-      const iterator = function* () {
-        yield* self.generateComprehension(
+      const iterator = function* (this: VirtualMachine) {
+        yield* this.generateComprehension(
           node.comprehension,
           compScope,
-          () => self.evaluateExpression(node.expression, compScope),
+          () => this.evaluateExpression(node.expression, compScope),
           scope
         );
       };
-      return new PyGenerator(iterator());
+      return new PyGenerator(iterator.call(this));
     }
     case ASTNodeType.BINARY_OPERATION: {
       const left = this.evaluateExpression(node.left, scope);
@@ -123,7 +122,7 @@ export function evaluateExpression(this: VirtualMachine, node: any, scope: Scope
         case '-':
           if (isIntObject(operand)) {
             const boxed = new Number(-operand.valueOf());
-            (boxed as any).__int__ = true;
+            (boxed as PyValue).__int__ = true;
             return boxed;
           }
           if (isFloatObject(operand)) return new Number(-operand.valueOf());
@@ -213,8 +212,8 @@ export function evaluateExpression(this: VirtualMachine, node: any, scope: Scope
     }
     case ASTNodeType.CALL: {
       const callee = this.evaluateExpression(node.callee, scope);
-      const positional: any[] = [];
-      const kwargs: Record<string, any> = {};
+      const positional: PyValue[] = [];
+      const kwargs: Record<string, PyValue> = {};
       for (const arg of node.args) {
         if (arg.type === 'KeywordArg') {
           kwargs[arg.name] = this.evaluateExpression(arg.value, scope);
@@ -273,39 +272,40 @@ export function evaluateExpression(this: VirtualMachine, node: any, scope: Scope
   }
 }
 
-export function evaluateExpressionString(this: VirtualMachine, expr: string, scope: Scope): any {
+export function evaluateExpressionString(this: VirtualMachine, expr: string, scope: Scope): PyValue {
   const wrapped = `__f = ${expr}\n`;
   const tokens = new Lexer(wrapped).tokenize();
   const ast = new Parser(tokens).parse();
-  const assignment = ast.body[0];
+  const assignment = ast['body'][0];
   if (!assignment || assignment.type !== ASTNodeType.ASSIGNMENT) {
     return this.executeExpressionInline(expr, scope);
   }
   return this.evaluateExpression(assignment.value, scope);
 }
 
-export function executeExpressionInline(this: VirtualMachine, expr: string, scope: Scope): any {
+export function executeExpressionInline(this: VirtualMachine, expr: string, scope: Scope): PyValue {
   const tokens = expr.trim().split(/\s+/);
-  if (tokens.length === 1 && scope.values.has(tokens[0])) {
+  if (tokens.length === 1 && tokens[0] && scope.values.has(tokens[0])) {
     return scope.get(tokens[0]);
   }
   return expr;
 }
 
-export function applyFormatSpec(this: VirtualMachine, value: any, spec: string): string {
+export function applyFormatSpec(this: VirtualMachine, value: PyValue, spec: string): string {
   if (!spec) return pyStr(value);
   if (spec.endsWith('%')) {
-    const digits = spec.includes('.') ? parseInt(spec.split('.')[1], 10) : 0;
+    const parts = spec.split('.');
+    const digits = spec.includes('.') ? parseInt(parts[1]!, 10) : 0;
     const num = isNumericLike(value) ? toNumber(value) : parseFloat(value);
     return (num * 100).toFixed(digits) + '%';
   }
   if (spec.includes('.')) {
     const parts = spec.split('.');
     const width = parts[0];
-    const precision = parseInt(parts[1].replace(/[^\d]/g, ''), 10);
+    const precision = parseInt(parts[1]!.replace(/[^\d]/g, ''), 10);
     const num = isNumericLike(value) ? toNumber(value) : parseFloat(value);
     const formatted = num.toFixed(precision);
-    return this.applyWidth(formatted, width);
+    return this.applyWidth(formatted, width!);
   }
   if (spec === 'd') return typeof value === 'bigint' ? value.toString() : String(parseInt(value, 10));
   if (spec === 'b') return typeof value === 'bigint' ? value.toString(2) : Number(value).toString(2);
@@ -331,7 +331,7 @@ export function applyWidth(text: string, spec: string): string {
   const match = spec.match(/([<^>])?(\d+)/);
   if (!match) return text;
   const align = match[1] || '>';
-  const width = parseInt(match[2], 10);
+  const width = parseInt(match[2]!, 10);
   if (text.length >= width) return text;
   const padding = width - text.length;
   if (align === '<') return text + ' '.repeat(padding);
@@ -343,7 +343,7 @@ export function applyWidth(text: string, spec: string): string {
   return ' '.repeat(padding) + text;
 }
 
-export function contains(this: VirtualMachine, container: any, value: any): boolean {
+export function contains(this: VirtualMachine, container: PyValue, value: PyValue): boolean {
   if (Array.isArray(container)) {
     if (isNumericLike(value)) {
       return container.some((item) => isNumericLike(item) && numericEquals(item, value));

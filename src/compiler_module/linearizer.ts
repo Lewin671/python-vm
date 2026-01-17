@@ -1,12 +1,13 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { ByteCode, CFG, BasicBlock, OpCode, Instruction } from '../types';
 
 export class Linearizer {
     linearize(
-        cfg: CFG, 
-        constants: any[], 
-        names: string[], 
-        varnames: string[], 
-        argcount: number = 0, 
+        cfg: CFG,
+        constants: any[],
+        names: string[],
+        varnames: string[],
+        argcount: number = 0,
         params?: any[],
         globals?: string[],
         nonlocals?: string[]
@@ -86,16 +87,17 @@ export class Linearizer {
             }
         }
 
-        return {
+        const bc: ByteCode = {
             instructions,
             constants,
             names,
             varnames,
             argcount,
-            params,
-            globals,
-            nonlocals
         };
+        if (params !== undefined) bc.params = params;
+        if (globals !== undefined) bc.globals = globals;
+        if (nonlocals !== undefined) bc.nonlocals = nonlocals;
+        return bc;
     }
 
     private orderBlocks(entry: BasicBlock): BasicBlock[] {

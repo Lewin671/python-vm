@@ -1,4 +1,5 @@
-import { ASTNode, ASTNodeType, OpCode, Instruction, CompareOp, BasicBlock, CFG, ByteCode } from '../types';
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { ASTNode, ASTNodeType, OpCode, CompareOp, BasicBlock, CFG } from '../types';
 import { Linearizer } from './linearizer';
 import { parseStringToken } from '../common/string-token';
 
@@ -13,7 +14,7 @@ export class CFGBuilder {
     private argcount: number = 0;
     private globalVars: Set<string> = new Set();  // Track global variable declarations
     private nonlocalVars: Set<string> = new Set();  // Track nonlocal variable declarations
-    private withStack: number = 0; // Track nested with statements for cleanup (not strictly used by linearizer but good for debugging)
+
 
     // Loop context stack for break/continue
     private loopStack: Array<{
@@ -38,7 +39,7 @@ export class CFGBuilder {
     }
 
     private addInstruction(opcode: OpCode, arg?: number) {
-        this.currentBlock.instructions.push({ opcode, arg });
+        this.currentBlock.instructions.push(arg !== undefined ? { opcode, arg } : { opcode });
     }
 
     private getConstantIndex(value: any): number {
@@ -49,14 +50,14 @@ export class CFGBuilder {
     }
 
     private getNameIndex(name: string): number {
-        let index = this.names.indexOf(name);
+        const index = this.names.indexOf(name);
         if (index !== -1) return index;
         this.names.push(name);
         return this.names.length - 1;
     }
 
     private getVarIndex(name: string): number {
-        let index = this.varnames.indexOf(name);
+        const index = this.varnames.indexOf(name);
         if (index !== -1) return index;
         this.varnames.push(name);
         return this.varnames.length - 1;
@@ -222,7 +223,7 @@ export class CFGBuilder {
                 this.visitIfExpression(node);
                 break;
 
-            case ASTNodeType.COMPARE:
+            case ASTNodeType.COMPARE: {
                 const operators = node.ops || node.operators || [];
                 if (operators.length === 0) {
                     this.visit(node.left);
@@ -270,6 +271,7 @@ export class CFGBuilder {
                     this.currentBlock = endBlock;
                 }
                 break;
+            }
 
             case ASTNodeType.CALL:
                 this.visit(node.callee || node.func);
@@ -499,7 +501,7 @@ export class CFGBuilder {
             case ASTNodeType.PASS_STATEMENT:
                 break;
 
-            case ASTNodeType.BREAK_STATEMENT:
+            case ASTNodeType.BREAK_STATEMENT: {
                 if (this.loopStack.length === 0) {
                     throw new Error('SyntaxError: break outside loop');
                 }
@@ -515,8 +517,9 @@ export class CFGBuilder {
                 unreachableAfterBreak.reachable = false;
                 this.currentBlock = unreachableAfterBreak;
                 break;
+            }
 
-            case ASTNodeType.CONTINUE_STATEMENT:
+            case ASTNodeType.CONTINUE_STATEMENT: {
                 if (this.loopStack.length === 0) {
                     throw new Error('SyntaxError: continue not properly in loop');
                 }
@@ -527,6 +530,7 @@ export class CFGBuilder {
                 unreachableAfterContinue.reachable = false;
                 this.currentBlock = unreachableAfterContinue;
                 break;
+            }
 
             case ASTNodeType.GLOBAL_STATEMENT:
                 // Global declarations - mark variables as global
@@ -542,13 +546,14 @@ export class CFGBuilder {
                 }
                 break;
 
-            case ASTNodeType.DELETE_STATEMENT:
+            case ASTNodeType.DELETE_STATEMENT: {
                 // Handle both 'target' (single) and 'targets' (array) for compatibility
                 const deleteTargets = node.targets || (node.target ? [node.target] : []);
                 for (const target of deleteTargets) {
                     this.visitTarget(target, 'delete');
                 }
                 break;
+            }
 
             case ASTNodeType.IMPORT_STATEMENT:
                 for (const name of node.names) {
@@ -790,11 +795,11 @@ export class CFGBuilder {
 
         // Only add jump-back if current block is reachable and doesn't already have a transfer
         if (this.currentBlock.reachable !== false && !this.currentBlock.next && !this.currentBlock.jumpTarget) {
-            if (process.env.DEBUG_CFG) {
+            if (process.env['DEBUG_CFG']) {
                 console.log(`WHILE: Adding jump-back from block ${this.currentBlock.id} to loop block ${loopBlock.id}`);
             }
             this.currentBlock.next = loopBlock;
-        } else if (process.env.DEBUG_CFG) {
+        } else if (process.env['DEBUG_CFG']) {
             console.log(`WHILE: NOT adding jump-back from block ${this.currentBlock.id}: reachable=${this.currentBlock.reachable}, hasNext=${!!this.currentBlock.next}, hasJumpTarget=${!!this.currentBlock.jumpTarget}`);
         }
 
@@ -835,11 +840,11 @@ export class CFGBuilder {
 
         // Only add jump-back if current block is reachable and doesn't already have a transfer
         if (this.currentBlock.reachable !== false && !this.currentBlock.next && !this.currentBlock.jumpTarget) {
-            if (process.env.DEBUG_CFG) {
+            if (process.env['DEBUG_CFG']) {
                 console.log(`FOR: Adding jump-back from block ${this.currentBlock.id} to loop block ${loopBlock.id}`);
             }
             this.currentBlock.next = loopBlock;
-        } else if (process.env.DEBUG_CFG) {
+        } else if (process.env['DEBUG_CFG']) {
             console.log(`FOR: NOT adding jump-back from block ${this.currentBlock.id}: reachable=${this.currentBlock.reachable}, hasNext=${!!this.currentBlock.next}, hasJumpTarget=${!!this.currentBlock.jumpTarget}`);
         }
 
@@ -1160,7 +1165,7 @@ export class CFGBuilder {
             this.addInstruction(OpCode.LOAD_CONST, this.getConstantIndex(null));
             this.currentBlock.jumpCondition = 'always';
             this.currentBlock.jumpTarget = finallyBlock!;
-            this.currentBlock.next = undefined;
+            delete this.currentBlock.next;
         } else {
             this.currentBlock.next = afterTry;
         }
@@ -1215,7 +1220,7 @@ export class CFGBuilder {
                     this.addInstruction(OpCode.LOAD_CONST, this.getConstantIndex(null));
                     this.currentBlock.jumpCondition = 'always';
                     this.currentBlock.jumpTarget = finallyBlock!;
-                    this.currentBlock.next = undefined;
+                    delete this.currentBlock.next;
                 } else {
                     this.currentBlock.next = afterTry;
                 }
@@ -1376,27 +1381,27 @@ export class CFGBuilder {
 
             // Compile the body block
             this.currentBlock = bodyBlock;
-            
+
             // Handle guard if present
             if (guard) {
                 const guardFailBlock = this.createBlock();
                 this.visit(guard);
                 this.currentBlock.jumpCondition = 'if_false';
                 this.currentBlock.jumpTarget = guardFailBlock;
-                
+
                 const guardPassBlock = this.createBlock();
                 this.currentBlock.next = guardPassBlock;
                 this.currentBlock = guardPassBlock;
-                
+
                 // Pop subject since we matched and guard passed
                 this.addInstruction(OpCode.POP_TOP);
-                
+
                 // Execute body
                 for (const stmt of body) {
                     this.visit(stmt);
                 }
                 this.currentBlock.next = endBlock;
-                
+
                 // Guard failed - go to next case
                 this.currentBlock = guardFailBlock;
                 this.currentBlock.next = nextCase;
@@ -1438,7 +1443,7 @@ export class CFGBuilder {
                 // Stack: [..., subject_copy]
                 this.visit(pattern.value);            // Stack: [..., subject_copy, value]
                 this.addInstruction(OpCode.COMPARE_OP, CompareOp.EQ); // Stack: [..., bool]
-                
+
                 // POP_JUMP_IF_FALSE will pop the bool and jump if false
                 // So after the jump instruction, stack is [...] in both paths
                 this.currentBlock.jumpCondition = 'if_false';
@@ -1450,19 +1455,19 @@ export class CFGBuilder {
             case ASTNodeType.MATCH_PATTERN_OR: {
                 // multiple patterns. If any matches -> success.
                 // Stack: [..., subject_copy]
-                
+
                 for (let i = 0; i < pattern.patterns.length; i++) {
                     const isLast = i === pattern.patterns.length - 1;
                     const nextP = isLast ? failBlock : this.createBlock();
-                    
+
                     if (!isLast) {
                         // Duplicate subject for this pattern (in case it fails)
                         this.addInstruction(OpCode.DUP_TOP); // Stack: [..., subject_copy, subject_copy2]
                     }
-                    
+
                     // compilePattern consumes one copy
                     this.compilePattern(pattern.patterns[i], nextP, successBlock);
-                    
+
                     if (!isLast) {
                         this.currentBlock = nextP;
                         // On failure, subject_copy2 was consumed, but subject_copy is still there
@@ -1474,21 +1479,21 @@ export class CFGBuilder {
             case ASTNodeType.MATCH_PATTERN_SEQUENCE: {
                 // Stack: [..., subject_copy]
                 // Check if list/tuple/sequence, check length, unpack
-                
+
                 // Check isinstance(subject, list)
                 this.addInstruction(OpCode.DUP_TOP); // [..., subject_copy, subject_copy2]
                 this.addInstruction(OpCode.LOAD_NAME, this.getNameIndex('isinstance'));
                 this.addInstruction(OpCode.ROT_TWO); // [..., subject_copy, isinstance, subject_copy2]
                 this.addInstruction(OpCode.LOAD_NAME, this.getNameIndex('list'));
                 this.addInstruction(OpCode.CALL_FUNCTION, 2); // [..., subject_copy, bool]
-                
+
                 // POP_JUMP_IF_FALSE will pop the bool
                 const notListBlock = this.createBlock();
                 const isListBlock = this.createBlock();
                 this.currentBlock.jumpCondition = 'if_false';
                 this.currentBlock.jumpTarget = notListBlock;
                 this.currentBlock.next = isListBlock;
-                
+
                 // Not a list - just pop subject_copy and fail
                 // (bool was already popped by POP_JUMP_IF_FALSE)
                 this.currentBlock = notListBlock;
@@ -1499,7 +1504,7 @@ export class CFGBuilder {
                 // (bool was already popped by POP_JUMP_IF_FALSE)
                 // Stack: [..., subject_copy]
                 this.currentBlock = isListBlock;
-                
+
                 // Check length
                 this.addInstruction(OpCode.DUP_TOP); // [..., subject_copy, subject_copy2]
                 this.addInstruction(OpCode.LOAD_NAME, this.getNameIndex('len'));
@@ -1513,7 +1518,7 @@ export class CFGBuilder {
                 this.currentBlock.jumpCondition = 'if_false';
                 this.currentBlock.jumpTarget = lenNoMatchBlock;
                 this.currentBlock.next = lenMatchBlock;
-                
+
                 // Length doesn't match - pop subject and fail
                 // (bool was already popped by POP_JUMP_IF_FALSE)
                 this.currentBlock = lenNoMatchBlock;
@@ -1524,11 +1529,11 @@ export class CFGBuilder {
                 // (bool was already popped by POP_JUMP_IF_FALSE)
                 // Stack: [..., subject_copy]
                 this.currentBlock = lenMatchBlock;
-                
+
                 // UNPACK_SEQUENCE consumes subject and pushes elements
                 this.addInstruction(OpCode.UNPACK_SEQUENCE, pattern.elements.length);
                 // Stack: [..., elem0, elem1, ...]
-                
+
                 // Store elements into pattern variables
                 for (let i = 0; i < pattern.elements.length; i++) {
                     const p = pattern.elements[i];

@@ -1,9 +1,10 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { VirtualMachine } from './vm';
 import { ASTNodeType, CompareOp } from '../types';
-import { BreakSignal, ContinueSignal, PyClass, PyDict, PyException, PyInstance, PySet, ReturnSignal, Scope } from './runtime-types';
+import { PyValue, BreakSignal, ContinueSignal, PyClass, PyDict, PyException, PyInstance, PySet, ReturnSignal, Scope } from './runtime-types';
 import { numericEquals } from './value-utils';
 
-export function applyCompare(this: VirtualMachine, op: CompareOp, a: any, b: any): boolean {
+export function applyCompare(this: VirtualMachine, op: CompareOp, a: PyValue, b: PyValue): boolean {
   switch (op) {
     case CompareOp.EQ:
       return numericEquals(a, b);
@@ -30,7 +31,7 @@ export function applyCompare(this: VirtualMachine, op: CompareOp, a: any, b: any
   }
 }
 
-export function iterableToArray(this: VirtualMachine, iterable: any): any[] {
+export function iterableToArray(this: VirtualMachine, iterable: PyValue): PyValue[] {
   if (iterable instanceof PyDict) return Array.from(iterable.keys());
   if (iterable instanceof PySet) return Array.from(iterable.values());
   if (Array.isArray(iterable)) return iterable;
@@ -38,7 +39,7 @@ export function iterableToArray(this: VirtualMachine, iterable: any): any[] {
   throw new Error('Object is not iterable');
 }
 
-export function matchValueEquals(left: any, right: any): boolean {
+export function matchValueEquals(left: PyValue, right: PyValue): boolean {
   if (Array.isArray(left) && Array.isArray(right)) {
     if (left.length !== right.length) return false;
     for (let i = 0; i < left.length; i++) {
@@ -56,7 +57,7 @@ export function matchValueEquals(left: any, right: any): boolean {
   return left === right;
 }
 
-export function applyBindings(bindings: Map<string, any>, scope: Scope): void {
+export function applyBindings(bindings: Map<string, PyValue>, scope: Scope): void {
   for (const [name, value] of bindings.entries()) {
     scope.set(name, value);
   }
@@ -64,15 +65,15 @@ export function applyBindings(bindings: Map<string, any>, scope: Scope): void {
 
 export function matchPattern(
   this: VirtualMachine,
-  node: any,
-  value: any,
+  node: PyValue,
+  value: PyValue,
   scope: Scope
-): { matched: boolean; bindings: Map<string, any> } {
+): { matched: boolean; bindings: Map<string, PyValue> } {
   switch (node.type) {
     case ASTNodeType.MATCH_PATTERN_WILDCARD:
       return { matched: true, bindings: new Map() };
     case ASTNodeType.MATCH_PATTERN_CAPTURE: {
-      const bindings = new Map<string, any>();
+      const bindings = new Map<string, PyValue>();
       bindings.set(node.name, value);
       return { matched: true, bindings };
     }
@@ -83,7 +84,7 @@ export function matchPattern(
     case ASTNodeType.MATCH_PATTERN_SEQUENCE: {
       if (!Array.isArray(value)) return { matched: false, bindings: new Map() };
       if (value.length !== node.elements.length) return { matched: false, bindings: new Map() };
-      const bindings = new Map<string, any>();
+      const bindings = new Map<string, PyValue>();
       for (let i = 0; i < node.elements.length; i++) {
         const result = this.matchPattern(node.elements[i], value[i], scope);
         if (!result.matched) return { matched: false, bindings: new Map() };
@@ -105,19 +106,19 @@ export function matchPattern(
   }
 }
 
-export function evaluateExpression(this: VirtualMachine, _node: any, _scope: Scope): any {
+export function evaluateExpression(this: VirtualMachine, _node: PyValue, _scope: Scope): PyValue {
   throw new Error('evaluateExpression is deprecated, use bytecode');
 }
 
-export function executeStatement(this: VirtualMachine, _node: any, _scope: Scope): any {
+export function executeStatement(this: VirtualMachine, _node: PyValue, _scope: Scope): PyValue {
   throw new Error('executeStatement is deprecated, use bytecode');
 }
 
 export function* executeBlockGenerator(
   this: VirtualMachine,
-  body: any[],
+  body: PyValue[],
   scope: Scope
-): Generator<any, any, any> {
+): Generator<any, PyValue> {
   for (const stmt of body) {
     yield* this.executeStatementGenerator(stmt, scope);
   }
@@ -126,14 +127,14 @@ export function* executeBlockGenerator(
 
 export function* executeStatementGenerator(
   this: VirtualMachine,
-  node: any,
+  node: PyValue,
   scope: Scope
-): Generator<any, any, any> {
+): Generator<any, PyValue> {
   const isSubclass = (klass: PyClass, target: PyClass): boolean => {
     if (klass === target) return true;
     return klass.bases.some((b) => isSubclass(b, target));
   };
-  const normalizeThrown = (err: any): any => {
+  const normalizeThrown = (err: PyValue): PyValue => {
     if (err instanceof PyInstance && err.klass.isException) return err;
     if (err instanceof PyClass && err.isException) return new PyInstance(err);
     if (err instanceof PyException) {
@@ -151,7 +152,7 @@ export function* executeStatementGenerator(
     return err;
   };
 
-  const matches = (expected: any, thrown: any): boolean => {
+  const matches = (expected: PyValue, thrown: PyValue): boolean => {
     if (!expected) return true;
     const norm = normalizeThrown(thrown);
     if (expected instanceof PyInstance && expected.klass.isException) {
@@ -321,8 +322,8 @@ export function* executeStatementGenerator(
   }
 }
 
-export function executeBlock(this: VirtualMachine, _body: any[], _scope: Scope): any {
-  let last: any = null;
+export function executeBlock(this: VirtualMachine, _body: PyValue[], _scope: Scope): PyValue {
+  let last: PyValue = null;
   for (const stmt of _body) {
     last = this.executeStatement(stmt, _scope);
   }

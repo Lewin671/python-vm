@@ -1,10 +1,9 @@
 import type { VirtualMachine } from './vm';
 import { ASTNodeType } from '../types';
-import { BreakSignal, ContinueSignal, PyClass, PyException, PyFunction, PyInstance, ReturnSignal, Scope } from './runtime-types';
-import { PyDict } from './runtime-types';
+import { PyValue, BreakSignal, ContinueSignal, PyClass, PyException, PyFunction, PyInstance, ReturnSignal, Scope, PyDict } from './runtime-types';
 import { findLocalVariables } from './value-utils';
 
-export function executeStatement(this: VirtualMachine, node: any, scope: Scope): any {
+export function executeStatement(this: VirtualMachine, node: PyValue, scope: Scope): PyValue {
   switch (node.type) {
     case ASTNodeType.EXPRESSION_STATEMENT:
       return this.evaluateExpression(node.expression, scope);
@@ -25,9 +24,9 @@ export function executeStatement(this: VirtualMachine, node: any, scope: Scope):
     }
     case ASTNodeType.AUG_ASSIGNMENT: {
       const target = node.target;
-      let current: any;
-      let obj: any;
-      let index: any;
+      let current: PyValue;
+      let obj: PyValue;
+      let index: PyValue;
 
       if (target.type === ASTNodeType.IDENTIFIER) {
         current = scope.get(target.name);
@@ -58,7 +57,7 @@ export function executeStatement(this: VirtualMachine, node: any, scope: Scope):
         const result = this.applyInPlaceBinary(node.operator, current, value);
 
         if (Array.isArray(obj)) {
-          if ((obj as any).__tuple__) {
+          if ((obj as PyValue).__tuple__) {
             throw new PyException('TypeError', "'tuple' object does not support item assignment");
           }
           if (index && index.type === ASTNodeType.SLICE) {
@@ -154,7 +153,7 @@ export function executeStatement(this: VirtualMachine, node: any, scope: Scope):
       return null;
     }
     case ASTNodeType.FUNCTION_DEF: {
-      const params = (node.params || []).map((param: any) => {
+      const params = (node.params || []).map((param: PyValue) => {
         if (param.type === 'Param' && param.defaultValue) {
           return { ...param, defaultEvaluated: this.evaluateExpression(param.defaultValue, scope) };
         }
@@ -169,7 +168,7 @@ export function executeStatement(this: VirtualMachine, node: any, scope: Scope):
       const fn = new PyFunction(node.name, params, node.body, closure, this.containsYield(node.body), localNames);
       scope.set(node.name, fn);
       if (node.decorators && node.decorators.length > 0) {
-        let decorated: any = fn;
+        let decorated: PyValue = fn;
         for (const decorator of node.decorators.reverse()) {
           const decFn = this.evaluateExpression(decorator, scope);
           decorated = this.callFunction(decFn, [decorated], scope);
@@ -179,15 +178,15 @@ export function executeStatement(this: VirtualMachine, node: any, scope: Scope):
       return null;
     }
     case ASTNodeType.CLASS_DEF: {
-      const bases = node.bases?.map((b: any) => this.evaluateExpression(b, scope)) || [];
+      const bases = node.bases?.map((b: PyValue) => this.evaluateExpression(b, scope)) || [];
       const classScope = new Scope(scope, true);
       this.executeBlock(node.body, classScope);
       const attributes = new Map(classScope.values.entries());
-      const isException = bases.some((b: any) => b instanceof PyClass && b.isException);
+      const isException = bases.some((b: PyValue) => b instanceof PyClass && b.isException);
       const klass = new PyClass(node.name, bases, attributes, isException);
       scope.set(node.name, klass);
       if (node.decorators && node.decorators.length > 0) {
-        let decorated: any = klass;
+        let decorated: PyValue = klass;
         for (const decorator of node.decorators.reverse()) {
           const decFn = this.evaluateExpression(decorator, scope);
           decorated = this.callFunction(decFn, [decorated], scope);
@@ -294,7 +293,7 @@ export function executeStatement(this: VirtualMachine, node: any, scope: Scope):
   }
 }
 
-export function assignTarget(this: VirtualMachine, target: any, value: any, scope: Scope) {
+export function assignTarget(this: VirtualMachine, target: PyValue, value: PyValue, scope: Scope) {
   if (target.type === ASTNodeType.IDENTIFIER) {
     scope.set(target.name, value);
     return;
@@ -306,7 +305,7 @@ export function assignTarget(this: VirtualMachine, target: any, value: any, scop
   }
   if (target.type === ASTNodeType.SUBSCRIPT) {
     const obj = this.evaluateExpression(target.object, scope);
-    let index: any;
+    let index: PyValue;
     if (target.index && target.index.type === ASTNodeType.SLICE) {
       index = {
         type: ASTNodeType.SLICE,
@@ -318,7 +317,7 @@ export function assignTarget(this: VirtualMachine, target: any, value: any, scop
       index = this.evaluateExpression(target.index, scope);
     }
     if (Array.isArray(obj)) {
-      if ((obj as any).__tuple__) {
+      if ((obj as PyValue).__tuple__) {
         throw new PyException('TypeError', "'tuple' object does not support item assignment");
       }
       if (index && index.type === ASTNodeType.SLICE) {
@@ -356,7 +355,7 @@ export function assignTarget(this: VirtualMachine, target: any, value: any, scop
   if (target.type === ASTNodeType.TUPLE_LITERAL || target.type === ASTNodeType.LIST_LITERAL) {
     const elements = target.elements;
     const unpackValue = this.toIterableArray(value);
-    const starIndex = elements.findIndex((el: any) => el.type === ASTNodeType.STARRED);
+    const starIndex = elements.findIndex((el: PyValue) => el.type === ASTNodeType.STARRED);
     if (starIndex === -1) {
       for (let i = 0; i < elements.length; i++) {
         this.assignTarget(elements[i], unpackValue[i], scope);
@@ -384,7 +383,7 @@ export function assignTarget(this: VirtualMachine, target: any, value: any, scop
   throw new PyException('TypeError', 'invalid assignment target');
 }
 
-export function toIterableArray(this: VirtualMachine, value: any): any[] {
+export function toIterableArray(this: VirtualMachine, value: PyValue): PyValue[] {
   if (Array.isArray(value)) return value;
   if (value && typeof value[Symbol.iterator] === 'function') {
     return Array.from(value);
@@ -392,10 +391,10 @@ export function toIterableArray(this: VirtualMachine, value: any): any[] {
   throw new PyException('TypeError', 'cannot unpack non-iterable');
 }
 
-export function deleteTarget(this: VirtualMachine, target: any, scope: Scope) {
+export function deleteTarget(this: VirtualMachine, target: PyValue, scope: Scope) {
   if (target.type === ASTNodeType.SUBSCRIPT) {
     const obj = this.evaluateExpression(target.object, scope);
-    let index: any;
+    let index: PyValue;
     if (target.index && target.index.type === ASTNodeType.SLICE) {
       index = {
         type: ASTNodeType.SLICE,
@@ -407,7 +406,7 @@ export function deleteTarget(this: VirtualMachine, target: any, scope: Scope) {
       index = this.evaluateExpression(target.index, scope);
     }
     if (Array.isArray(obj)) {
-      if ((obj as any).__tuple__) {
+      if ((obj as PyValue).__tuple__) {
         throw new PyException('TypeError', "'tuple' object does not support item assignment");
       }
       if (index && index.type === ASTNodeType.SLICE) {

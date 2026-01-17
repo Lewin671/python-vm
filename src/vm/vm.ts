@@ -26,10 +26,10 @@ import {
   setAttribute,
 } from './operations';
 import { isTruthy } from './truthy';
-import { Scope } from './runtime-types';
+import { PyValue } from './runtime-types';
 
 export class VirtualMachine {
-  public moduleCache: Map<string, any> = new Map();
+  public moduleCache: Map<string, PyValue> = new Map();
   public moduleSearchPaths: string[];
 
   constructor(moduleSearchPaths: string[] = [process.cwd()]) {

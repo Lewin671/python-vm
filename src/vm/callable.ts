@@ -1,14 +1,15 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { VirtualMachine } from './vm';
 import { ASTNodeType } from '../types';
-import { PyClass, PyDict, PyException, PyFunction, PyGenerator, PyInstance, ReturnSignal, Scope, Frame } from './runtime-types';
+import { PyValue, PyClass, PyDict, PyException, PyFunction, PyGenerator, PyInstance, ReturnSignal, Scope, Frame } from './runtime-types';
 
 export function callFunction(
   this: VirtualMachine,
-  func: any,
-  args: any[],
+  func: PyValue,
+  args: PyValue[],
   scope: Scope,
-  kwargs: Record<string, any> = {}
-): any {
+  kwargs: Record<string, PyValue> = {}
+): PyValue {
   // console.log('Calling', func, 'with', args);
   if (!kwargs) {
     kwargs = {};
@@ -18,15 +19,15 @@ export function callFunction(
     callScope.locals = new Set(func.localNames);
     if (func.bytecode) {
       if (func.bytecode.globals) {
-        func.bytecode.globals.forEach(g => callScope.globals.add(g));
+        func.bytecode.globals.forEach((g: string) => callScope.globals.add(g));
       }
       if (func.bytecode.nonlocals) {
-        func.bytecode.nonlocals.forEach(n => callScope.nonlocals.add(n));
+        func.bytecode.nonlocals.forEach((n: string) => callScope.nonlocals.add(n));
       }
     }
     for (const param of func.params) {
       if (param.type === 'Param') {
-        let argValue: any;
+        let argValue: PyValue;
         if (args.length > 0) {
           argValue = args.shift();
         } else if (param.name in kwargs) {
@@ -42,7 +43,7 @@ export function callFunction(
         callScope.set(param.name, argValue);
       } else if (param.type === 'VarArg') {
         const varArgs = [...args];
-        (varArgs as any).__tuple__ = true;
+        (varArgs as PyValue).__tuple__ = true;
         callScope.set(param.name, varArgs);
         args = [];
       } else if (param.type === 'KwArg') {
@@ -94,7 +95,7 @@ export function callFunction(
   throw new PyException('TypeError', 'object is not callable');
 }
 
-export function containsYield(this: VirtualMachine, body: any[]): boolean {
+export function containsYield(this: VirtualMachine, body: PyValue[]): boolean {
   for (const stmt of body) {
     if (stmt.type === ASTNodeType.YIELD) return true;
     if (stmt.expression && this.expressionHasYield(stmt.expression)) return true;
@@ -104,7 +105,7 @@ export function containsYield(this: VirtualMachine, body: any[]): boolean {
   return false;
 }
 
-export function evaluateComprehension(this: VirtualMachine, node: any, scope: Scope, emit: () => void, outerScope?: Scope) {
+export function evaluateComprehension(this: VirtualMachine, node: PyValue, scope: Scope, emit: () => void, outerScope?: Scope) {
   const clauses = node.clauses || [];
   const walk = (index: number) => {
     if (index >= clauses.length) {
@@ -117,7 +118,7 @@ export function evaluateComprehension(this: VirtualMachine, node: any, scope: Sc
     const items = Array.isArray(iterable) ? iterable : Array.from(iterable);
     for (const item of items) {
       this.assignTarget(clause.target, item, scope);
-      const passes = clause.ifs.every((cond: any) => this.isTruthy(this.evaluateExpression(cond, scope), scope));
+      const passes = clause.ifs.every((cond: PyValue) => this.isTruthy(this.evaluateExpression(cond, scope), scope));
       if (passes) {
         walk(index + 1);
       }
@@ -128,26 +129,27 @@ export function evaluateComprehension(this: VirtualMachine, node: any, scope: Sc
 
 export function* generateComprehension(
   this: VirtualMachine,
-  node: any,
+  node: PyValue,
   scope: Scope,
-  valueFactory: () => any,
+  valueFactory: () => PyValue,
   outerScope?: Scope
-): Generator<any, any, any> {
+): Generator<any, PyValue> {
   const clauses = node.clauses || [];
-  const walk = (index: number): Generator<any, any, any> => {
-    const self = this;
-    return (function* (): Generator<any, any, any> {
+  // eslint-disable-next-line @typescript-eslint/no-this-alias
+  const vm = this;
+  const walk = (index: number): Generator<any, PyValue> => {
+    return (function* (): Generator<any, PyValue> {
       if (index >= clauses.length) {
         yield valueFactory();
         return;
       }
       const clause = clauses[index];
       const iterScope = (index === 0 && outerScope) ? outerScope : scope;
-      const iterable = self.evaluateExpression(clause.iter, iterScope);
+      const iterable = vm.evaluateExpression(clause.iter, iterScope);
       const items = Array.isArray(iterable) ? iterable : Array.from(iterable);
       for (const item of items) {
-        self.assignTarget(clause.target, item, scope);
-        const passes = clause.ifs.every((cond: any) => self.isTruthy(self.evaluateExpression(cond, scope), scope));
+        vm.assignTarget(clause.target, item, scope);
+        const passes = clause.ifs.every((cond: PyValue) => vm.isTruthy(vm.evaluateExpression(cond, scope), scope));
         if (passes) {
           yield* walk(index + 1);
         }
@@ -158,11 +160,11 @@ export function* generateComprehension(
   return null;
 }
 
-export function expressionHasYield(this: VirtualMachine, node: any): boolean {
+export function expressionHasYield(this: VirtualMachine, node: PyValue): boolean {
   if (!node) return false;
   if (node.type === ASTNodeType.YIELD) return true;
   for (const key of Object.keys(node)) {
-    const value = (node as any)[key];
+    const value = (node as PyValue)[key];
     if (Array.isArray(value)) {
       if (value.some((item) => item && typeof item === 'object' && this.expressionHasYield(item))) {
         return true;

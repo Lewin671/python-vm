@@ -27,14 +27,14 @@ export class Parser {
 
   expect(type: TokenType, value?: string): Token {
     const token = this.peek();
-    if (!token) throw new Error(`Expected ${TokenType[type]}${value ? ` \"${value}\"` : ''}, but got end of input`);
+    if (!token) throw new Error(`Expected ${TokenType[type]}${value ? ` "${value}"` : ''}, but got end of input`);
     if (token.type !== type) {
       throw new Error(
-        `Expected ${TokenType[type]}${value ? ` \"${value}\"` : ''}, but got ${TokenType[token.type]} \"${token.value}\" at line ${token.line}`
+        `Expected ${TokenType[type]}${value ? ` "${value}"` : ''}, but got ${TokenType[token.type]} "${token.value}" at line ${token.line}`
       );
     }
     if (value !== undefined && token.value !== value) {
-      throw new Error(`Expected \"${value}\", but got \"${token.value}\" at line ${token.line}`);
+      throw new Error(`Expected "${value}", but got "${token.value}" at line ${token.line}`);
     }
     return this.consume();
   }

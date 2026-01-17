@@ -1,8 +1,8 @@
 import type { VirtualMachine } from './vm';
 import { ByteCode, OpCode, ASTNodeType, CompareOp } from '../types';
-import { BreakSignal, ContinueSignal, ReturnSignal, PyClass, PyDict, PyException, PyFunction, PyInstance, PySet, Scope, Frame } from './runtime-types';
+import { PyValue, PyClass, PyDict, PyException, PyFunction, PyInstance, PySet, Scope, Frame } from './runtime-types';
 
-export function execute(this: VirtualMachine, bytecode: ByteCode): any {
+export function execute(this: VirtualMachine, bytecode: ByteCode): PyValue {
   const globalScope = new Scope();
   this.installBuiltins(globalScope);
 
@@ -10,7 +10,7 @@ export function execute(this: VirtualMachine, bytecode: ByteCode): any {
   return this.executeFrame(frame);
 }
 
-export function executeFrame(this: VirtualMachine, frame: Frame): any {
+export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
   const { instructions, constants, names, varnames } = frame.bytecode;
   // console.log('Executing frame with names:', names);
 
@@ -26,7 +26,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
     }
   }
 
-  let lastValue: any = null;
+  let lastValue: PyValue = null;
 
   const renderFString = (template: string, scope: Scope): string => {
     return template.replace(/\{([^}]+)\}/g, (_m, expr) => {
@@ -39,12 +39,12 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
           if (varname === undefined) continue;
           if (scope.values.has(varname)) {
             const val = scope.values.get(varname);
-            if (process.env.DEBUG_NONLOCAL) {
+            if (process.env['DEBUG_NONLOCAL']) {
               console.log(`renderFString: varname=${varname}, scope.values.get=${val}`);
             }
             evalScope.values.set(varname, val);
           } else if (frame.locals[i] !== undefined) {
-            if (process.env.DEBUG_NONLOCAL) {
+            if (process.env['DEBUG_NONLOCAL']) {
               console.log(`renderFString: varname=${varname}, frame.locals[${i}]=${frame.locals[i]}`);
             }
             evalScope.values.set(varname, frame.locals[i]);
@@ -56,7 +56,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
     });
   };
 
-  const normalizeThrown = (err: any): any => {
+  const normalizeThrown = (err: PyValue): PyValue => {
     if (err instanceof PyException) {
       try {
         const klass = frame.scope.get(err.pyType);
@@ -72,7 +72,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
     return err;
   };
 
-  const dispatchException = (err: any): boolean => {
+  const dispatchException = (err: PyValue): boolean => {
     if (frame.blockStack.length === 0) return false;
     const block = frame.blockStack.pop()!;
     frame.stack.length = block.stackHeight;
@@ -90,7 +90,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
       switch (opcode) {
         case OpCode.LOAD_CONST:
           {
-            const val: any = constants[arg!];
+            const val: PyValue = constants[arg!];
             if (val && typeof val === 'object' && typeof val.__fstring__ === 'string') {
               frame.stack.push(renderFString(val.__fstring__, frame.scope));
             } else {
@@ -161,7 +161,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
 
         case OpCode.UNPACK_SEQUENCE: {
           const seq = frame.stack.pop();
-          const items = Array.isArray(seq) ? seq : Array.from(seq as any);
+          const items = Array.isArray(seq) ? seq : Array.from(seq as PyValue);
           if (items.length !== arg!) {
             throw new PyException('ValueError', `not enough values to unpack (expected ${arg!}, got ${items.length})`);
           }
@@ -173,7 +173,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
 
         case OpCode.UNPACK_EX: {
           const seq = frame.stack.pop();
-          const items = Array.isArray(seq) ? seq : Array.from(seq as any);
+          const items = Array.isArray(seq) ? seq : Array.from(seq as PyValue);
           const beforeCount = (arg! >> 8) & 0xff;
           const afterCount = arg! & 0xff;
           if (items.length < beforeCount + afterCount) {
@@ -219,7 +219,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
           const val = frame.stack.pop();
 
           // Check if object is a tuple (immutable)
-          if (Array.isArray(obj) && (obj as any).__tuple__) {
+          if (Array.isArray(obj) && (obj as PyValue).__tuple__) {
             throw new PyException('TypeError', `'tuple' object does not support item assignment`);
           }
 
@@ -545,9 +545,9 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
         }
 
         case OpCode.BUILD_TUPLE: {
-          const tuple: any[] = [];
+          const tuple: PyValue[] = [];
           for (let i = 0; i < arg!; i++) tuple.unshift(frame.stack.pop());
-          (tuple as any).__tuple__ = true;
+          (tuple as PyValue).__tuple__ = true;
           frame.stack.push(tuple);
           break;
         }
@@ -651,14 +651,14 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
           const defaultsCount = arg || 0;
           const name = frame.stack.pop();
           const bc = frame.stack.pop();
-          const defaults: any[] = [];
+          const defaults: PyValue[] = [];
           // Pop default values from stack in reverse order (last default on top)
           for (let i = 0; i < defaultsCount; i++) {
             defaults.unshift(frame.stack.pop());
           }
 
           // Create a copy of params with evaluated defaults
-          const params = (bc && bc.params) ? bc.params.map((p: any) => ({ ...p })) : [];
+          const params = (bc && bc.params) ? bc.params.map((p: PyValue) => ({ ...p })) : [];
           if (params.length > 0 && defaultsCount > 0) {
             let defaultIndex = 0;
             for (let i = params.length - defaultsCount; i < params.length; i++) {
@@ -668,8 +668,8 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
             }
           }
 
-          const isGenerator = !!(bc && (bc as any).isGenerator);
-          const body = (bc && (bc as any).astBody) ? (bc as any).astBody : [];
+          const isGenerator = !!(bc && (bc as PyValue).isGenerator);
+          const body = (bc && (bc as PyValue).astBody) ? (bc as PyValue).astBody : [];
           const func = new PyFunction(name, params, body, frame.scope, isGenerator, new Set(), bc);
           func.closure_shared_values = frame.scope.values;
           frame.stack.push(func);
@@ -678,7 +678,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
 
         case OpCode.LOAD_BUILD_CLASS: {
           const enclosingScope = frame.scope;
-          frame.stack.push((bodyFn: any, name: any, ...bases: any[]) => {
+          frame.stack.push((bodyFn: PyValue, name: PyValue, ...bases: PyValue[]) => {
             const classScope = new Scope(enclosingScope, true);
             if (bodyFn instanceof PyFunction && bodyFn.bytecode) {
               const bodyFrame = new Frame(bodyFn.bytecode, classScope);
@@ -688,22 +688,22 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
               bodyFn();
             }
             const attributes = new Map(classScope.values.entries());
-            const isException = bases.some((b: any) => b instanceof PyClass && b.isException);
+            const isException = bases.some((b: PyValue) => b instanceof PyClass && b.isException);
             return new PyClass(String(name), bases, attributes, isException);
           });
           break;
         }
 
         case OpCode.IMPORT_NAME: {
-          const level = frame.stack.pop();
-          const fromlist = frame.stack.pop();
+          frame.stack.pop(); // level
+          frame.stack.pop(); // fromlist
           const name = names[arg!];
           frame.stack.push(this.importModule(name, frame.scope));
           break;
         }
 
         case OpCode.RAISE_VARARGS: {
-          const cause = arg! >= 2 ? frame.stack.pop() : null;
+          if (arg! >= 2) frame.stack.pop(); // cause
           const exc = arg! >= 1 ? frame.stack.pop() : null;
           // simplified raise
           throw exc || new PyException('RuntimeError', 'No exception to raise');
@@ -779,17 +779,17 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
 
         case OpCode.CALL_FUNCTION_KW: {
           const kwNames = frame.stack.pop();
-          const kwList: any[] = Array.isArray(kwNames) ? kwNames : [];
+          const kwList: PyValue[] = Array.isArray(kwNames) ? kwNames : [];
           const kwCount = kwList.length;
           const total = arg!;
-          const values: any[] = [];
+          const values: PyValue[] = [];
           for (let i = 0; i < total; i++) {
             values.unshift(frame.stack.pop());
           }
           const func = frame.stack.pop();
           const positionalCount = total - kwCount;
           const positional = values.slice(0, positionalCount);
-          const kwargs: Record<string, any> = {};
+          const kwargs: Record<string, PyValue> = {};
           for (let i = 0; i < kwCount; i++) {
             kwargs[String(kwList[i])] = values[positionalCount + i];
           }
@@ -800,7 +800,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): any {
         case OpCode.CALL_FUNCTION_EX: {
           // arg == 1 means there's a kwargs dict on top
           // Stack: [func, args_tuple] or [func, args_tuple, kwargs_dict]
-          let kwargs: Record<string, any> = {};
+          const kwargs: Record<string, PyValue> = {};
           if (arg === 1) {
             const kwDict = frame.stack.pop();
             if (kwDict instanceof PyDict) {

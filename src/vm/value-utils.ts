@@ -1,35 +1,35 @@
-import { PyClass, PyDict, PyException, PyFunction, PyInstance, PySet } from './runtime-types';
+import { PyValue, PyClass, PyDict, PyException, PyFunction, PyInstance, PySet } from './runtime-types';
 export { parseStringToken } from '../common/string-token';
 
-export const isPyNone = (value: any) => value === null;
+export const isPyNone = (value: PyValue) => value === null;
 
-export const isBigInt = (value: any): value is bigint => typeof value === 'bigint';
-export const isIntObject = (value: any): boolean => value instanceof Number && (value as any).__int__ === true;
-export const isFloatObject = (value: any): boolean => value instanceof Number && !isIntObject(value);
-export const isFloatLike = (value: any): boolean => isFloatObject(value) || (typeof value === 'number' && !Number.isInteger(value));
-export const isIntLike = (value: any): boolean =>
+export const isBigInt = (value: PyValue): value is bigint => typeof value === 'bigint';
+export const isIntObject = (value: PyValue): boolean => value instanceof Number && (value as PyValue).__int__ === true;
+export const isFloatObject = (value: PyValue): boolean => value instanceof Number && !isIntObject(value);
+export const isFloatLike = (value: PyValue): boolean => isFloatObject(value) || (typeof value === 'number' && !Number.isInteger(value));
+export const isIntLike = (value: PyValue): boolean =>
   isBigInt(value) ||
   value === true ||
   value === false ||
   (typeof value === 'number' && Number.isInteger(value)) ||
   isIntObject(value);
-export const isNumericLike = (value: any): boolean =>
+export const isNumericLike = (value: PyValue): boolean =>
   isBigInt(value) || typeof value === 'number' || value instanceof Number || typeof value === 'boolean';
-export const toNumber = (value: any): number => {
+export const toNumber = (value: PyValue): number => {
   if (value instanceof Number) return value.valueOf();
   if (typeof value === 'boolean') return value ? 1 : 0;
   if (typeof value === 'bigint') return Number(value);
   return value;
 };
-export const toBigIntValue = (value: any): bigint => {
+export const toBigIntValue = (value: PyValue): bigint => {
   if (typeof value === 'bigint') return value;
   if (value instanceof Number) return BigInt(Math.trunc(value.valueOf()));
   if (typeof value === 'number') return BigInt(value);
   return BigInt(value);
 };
-export const shouldUseBigInt = (left: any, right: any): boolean =>
+export const shouldUseBigInt = (left: PyValue, right: PyValue): boolean =>
   (isBigInt(left) || isBigInt(right)) && !isFloatLike(left) && !isFloatLike(right);
-export const numericEquals = (left: any, right: any): boolean => {
+export const numericEquals = (left: PyValue, right: PyValue): boolean => {
   if (isNumericLike(left) && isNumericLike(right)) {
     const l = left instanceof Number ? left.valueOf() : left;
     const r = right instanceof Number ? right.valueOf() : right;
@@ -40,9 +40,9 @@ export const numericEquals = (left: any, right: any): boolean => {
   return left === right;
 };
 export const numericCompare = (
-  left: any,
-  right: any
-): { left: any; right: any } | null => {
+  left: PyValue,
+  right: PyValue
+): { left: PyValue; right: PyValue } | null => {
   if (!isNumericLike(left) || !isNumericLike(right)) return null;
   const l = left instanceof Number ? left.valueOf() : left;
   const r = right instanceof Number ? right.valueOf() : right;
@@ -56,7 +56,7 @@ export const bigIntFloorDiv = (left: bigint, right: bigint): bigint => {
   return quotient;
 };
 
-export const pyTypeName = (value: any): string => {
+export const pyTypeName = (value: PyValue): string => {
   if (value === null) return 'NoneType';
   if (isBigInt(value)) return 'int';
   if (isIntObject(value)) return 'int';
@@ -64,7 +64,7 @@ export const pyTypeName = (value: any): string => {
   if (typeof value === 'boolean') return 'bool';
   if (typeof value === 'number') return Number.isInteger(value) ? 'int' : 'float';
   if (typeof value === 'string') return 'str';
-  if (Array.isArray(value)) return (value as any).__tuple__ ? 'tuple' : 'list';
+  if (Array.isArray(value)) return (value as PyValue).__tuple__ ? 'tuple' : 'list';
   if (value instanceof PySet) return 'set';
   if (value instanceof PyDict) return 'dict';
   if (value instanceof PyFunction) return 'function';
@@ -73,7 +73,7 @@ export const pyTypeName = (value: any): string => {
   return typeof value;
 };
 
-export const pyRepr = (value: any, seen: Set<any> = new Set()): string => {
+export const pyRepr = (value: PyValue, seen: Set<PyValue> = new Set()): string => {
   if (value === null) return 'None';
   if (value instanceof Number) {
     const num = value.valueOf();
@@ -101,14 +101,14 @@ export const pyRepr = (value: any, seen: Set<any> = new Set()): string => {
   const isContainer = Array.isArray(value) || value instanceof PySet || value instanceof PyDict;
   if (isContainer) {
     if (seen.has(value)) {
-      if (Array.isArray(value)) return (value as any).__tuple__ ? '(...)' : '[...]';
+      if (Array.isArray(value)) return (value as PyValue).__tuple__ ? '(...)' : '[...]';
       return '{...}';
     }
     seen.add(value);
     try {
       if (Array.isArray(value)) {
-        const items = value.map((v: any) => pyRepr(v, seen)).join(', ');
-        if ((value as any).__tuple__) {
+        const items = value.map((v: PyValue) => pyRepr(v, seen)).join(', ');
+        if ((value as PyValue).__tuple__) {
           if (value.length === 1) return `(${items},)`;
           return `(${items})`;
         }
@@ -137,7 +137,7 @@ export const pyRepr = (value: any, seen: Set<any> = new Set()): string => {
   return String(value);
 };
 
-export const pyStr = (value: any): string => {
+export const pyStr = (value: PyValue): string => {
   if (typeof value === 'string') return value;
   if (value && value.__complex__) return pyRepr(value);
   if (value && value.__typeName__) return `<class '${value.__typeName__}'>`;
@@ -149,15 +149,15 @@ export const pyStr = (value: any): string => {
   return pyRepr(value);
 };
 
-export const isComplex = (value: any) => value && value.__complex__;
+export const isComplex = (value: PyValue) => value && value.__complex__;
 
-export const toComplex = (value: any) => {
+export const toComplex = (value: PyValue) => {
   if (isComplex(value)) return value;
   if (isNumericLike(value)) return { __complex__: true, re: toNumber(value), im: 0 };
   return { __complex__: true, re: 0, im: 0 };
 };
 
-export const pythonModulo = (left: any, right: any) => {
+export const pythonModulo = (left: PyValue, right: PyValue) => {
   if (shouldUseBigInt(left, right)) {
     const leftNum = toBigIntValue(left);
     const rightNum = toBigIntValue(right);
@@ -180,12 +180,12 @@ export const pythonModulo = (left: any, right: any) => {
 
 import { ASTNodeType } from '../types';
 
-export function findLocalVariables(body: any[]): Set<string> {
+export function findLocalVariables(body: PyValue[]): Set<string> {
   const locals = new Set<string>();
   const globals = new Set<string>();
   const nonlocals = new Set<string>();
 
-  function collect(node: any) {
+  function collect(node: PyValue) {
     if (!node) return;
     if (Array.isArray(node)) {
       for (const item of node) collect(item);
@@ -260,7 +260,7 @@ export function findLocalVariables(body: any[]): Set<string> {
     }
   }
 
-  function collectTarget(target: any) {
+  function collectTarget(target: PyValue) {
     if (target.type === ASTNodeType.IDENTIFIER) {
       locals.add(target.name);
     } else if (target.type === ASTNodeType.TUPLE_LITERAL || target.type === ASTNodeType.LIST_LITERAL) {
@@ -274,7 +274,7 @@ export function findLocalVariables(body: any[]): Set<string> {
     }
   }
 
-  function collectPattern(pattern: any) {
+  function collectPattern(pattern: PyValue) {
     if (!pattern) return;
     switch (pattern.type) {
       case ASTNodeType.MATCH_PATTERN_CAPTURE:

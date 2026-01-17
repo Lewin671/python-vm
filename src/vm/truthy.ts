@@ -1,8 +1,8 @@
 import type { VirtualMachine } from './vm';
-import { PyDict, PyException, PyInstance, PySet, Scope } from './runtime-types';
+import { PyValue, PyDict, PyException, PyInstance, PySet, Scope } from './runtime-types';
 import { isNumericLike, toNumber } from './value-utils';
 
-export function isTruthy(this: VirtualMachine, value: any, scope: Scope): boolean {
+export function isTruthy(this: VirtualMachine, value: PyValue, scope: Scope): boolean {
   if (value === null || value === undefined) return false;
   if (value instanceof Number) return value.valueOf() !== 0;
   if (typeof value === 'boolean') return value;

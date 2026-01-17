@@ -1,10 +1,10 @@
 import type { VirtualMachine } from './vm';
-import { PyClass, PyDict, PyException, PyFile, PyGenerator, PyInstance, PySet, Scope } from './runtime-types';
+import { PyValue, PyClass, PyDict, PyException, PyFile, PyGenerator, PyInstance, PySet, Scope } from './runtime-types';
 import { isFloatLike, isNumericLike, pyStr, pyTypeName, toBigIntValue, toNumber } from './value-utils';
 
 export function installBuiltins(this: VirtualMachine, scope: Scope) {
-  const builtins = new Map<string, any>();
-  builtins.set('print', (...args: any[]) => {
+  const builtins = new Map<string, PyValue>();
+  builtins.set('print', (...args: PyValue[]) => {
     let sep = ' ';
     let end = '\n';
     if (args.length > 0) {
@@ -20,12 +20,12 @@ export function installBuiltins(this: VirtualMachine, scope: Scope) {
     process.stdout.write(output);
     return null;
   });
-  builtins.set('len', (value: any) => {
+  builtins.set('len', (value: PyValue) => {
     if (typeof value === 'string' || Array.isArray(value)) return value.length;
     if (value instanceof PyDict || value instanceof PySet) return value.size;
     throw new PyException('TypeError', 'object has no len()');
   });
-  builtins.set('range', (...args: any[]) => {
+  builtins.set('range', (...args: PyValue[]) => {
     let start = 0;
     let end = 0;
     let step = 1;
@@ -48,50 +48,50 @@ export function installBuiltins(this: VirtualMachine, scope: Scope) {
     }
     return result;
   });
-  const listFn = (value: any) => {
+  const listFn = (value: PyValue) => {
     if (Array.isArray(value)) return [...value];
     if (value instanceof PySet) return Array.from(value.values());
     if (value && typeof value[Symbol.iterator] === 'function') return Array.from(value);
     return [];
   };
-  (listFn as any).__typeName__ = 'list';
+  (listFn as PyValue).__typeName__ = 'list';
   builtins.set('list', listFn);
-  const tupleFn = (value: any) => {
+  const tupleFn = (value: PyValue) => {
     const arr = Array.isArray(value) ? [...value] : value && typeof value[Symbol.iterator] === 'function' ? Array.from(value) : [];
-    (arr as any).__tuple__ = true;
+    (arr as PyValue).__tuple__ = true;
     return arr;
   };
-  (tupleFn as any).__typeName__ = 'tuple';
+  (tupleFn as PyValue).__typeName__ = 'tuple';
   builtins.set('tuple', tupleFn);
-  const setFn = (value: any) => {
+  const setFn = (value: PyValue) => {
     if (value instanceof PySet) return new PySet(value);
     if (Array.isArray(value)) return new PySet(value);
     if (value && typeof value[Symbol.iterator] === 'function') return new PySet(Array.from(value));
     return new PySet();
   };
-  (setFn as any).__typeName__ = 'set';
+  (setFn as PyValue).__typeName__ = 'set';
   builtins.set('set', setFn);
-  builtins.set('sum', (value: any[]) => {
+  builtins.set('sum', (value: PyValue[]) => {
     if (value.some((v) => typeof v === 'bigint')) {
       return value.reduce((acc, v) => acc + toBigIntValue(v), 0n);
     }
     return value.reduce((acc, v) => acc + v, 0);
   });
-  builtins.set('max', (...args: any[]) => {
+  builtins.set('max', (...args: PyValue[]) => {
     const values = args.length === 1 && Array.isArray(args[0]) ? args[0] : args;
-    if (values.every((v: any) => isNumericLike(v) && !isFloatLike(v))) {
-      return values.reduce((acc: any, v: any) => (toBigIntValue(v) > toBigIntValue(acc) ? v : acc));
+    if (values.every((v: PyValue) => isNumericLike(v) && !isFloatLike(v))) {
+      return values.reduce((acc: PyValue, v: PyValue) => (toBigIntValue(v) > toBigIntValue(acc) ? v : acc));
     }
-    return Math.max(...values.map((v: any) => toNumber(v)));
+    return Math.max(...values.map((v: PyValue) => toNumber(v)));
   });
-  builtins.set('min', (...args: any[]) => {
+  builtins.set('min', (...args: PyValue[]) => {
     const values = args.length === 1 && Array.isArray(args[0]) ? args[0] : args;
-    if (values.every((v: any) => isNumericLike(v) && !isFloatLike(v))) {
-      return values.reduce((acc: any, v: any) => (toBigIntValue(v) < toBigIntValue(acc) ? v : acc));
+    if (values.every((v: PyValue) => isNumericLike(v) && !isFloatLike(v))) {
+      return values.reduce((acc: PyValue, v: PyValue) => (toBigIntValue(v) < toBigIntValue(acc) ? v : acc));
     }
-    return Math.min(...values.map((v: any) => toNumber(v)));
+    return Math.min(...values.map((v: PyValue) => toNumber(v)));
   });
-  builtins.set('abs', (value: any) => {
+  builtins.set('abs', (value: PyValue) => {
     if (typeof value === 'bigint') return value < 0n ? -value : value;
     return Math.abs(toNumber(value));
   });
@@ -108,7 +108,7 @@ export function installBuiltins(this: VirtualMachine, scope: Scope) {
     const factor = Math.pow(10, digits);
     return roundHalfToEven(value * factor) / factor;
   });
-  const intFn = (value: any) => {
+  const intFn = (value: PyValue) => {
     if (typeof value === 'bigint') return value;
     const text = typeof value === 'string' ? value.trim() : null;
     if (text && /^[-+]?\\d+$/.test(text)) {
@@ -122,12 +122,12 @@ export function installBuiltins(this: VirtualMachine, scope: Scope) {
     const result = parseInt(value, 10);
     if (Number.isNaN(result)) throw new PyException('ValueError', 'Invalid integer');
     const boxed = new Number(result);
-    (boxed as any).__int__ = true;
+    (boxed as PyValue).__int__ = true;
     return boxed;
   };
-  (intFn as any).__typeName__ = 'int';
+  (intFn as PyValue).__typeName__ = 'int';
   builtins.set('int', intFn);
-  const floatFn = (value?: any) => {
+  const floatFn = (value?: PyValue) => {
     if (value === undefined) return new Number(0);
     if (value instanceof Number) return new Number(value.valueOf());
     if (typeof value === 'number') return new Number(value);
@@ -147,20 +147,20 @@ export function installBuiltins(this: VirtualMachine, scope: Scope) {
     if (Number.isNaN(result)) throw new PyException('ValueError', 'Invalid float');
     return new Number(result);
   };
-  (floatFn as any).__typeName__ = 'float';
+  (floatFn as PyValue).__typeName__ = 'float';
   builtins.set('float', floatFn);
-  const strFn = (value: any) => pyStr(value);
-  (strFn as any).__typeName__ = 'str';
+  const strFn = (value: PyValue) => pyStr(value);
+  (strFn as PyValue).__typeName__ = 'str';
   builtins.set('str', strFn);
-  const boolFn = (value: any) => this.isTruthy(value, scope);
-  (boolFn as any).__typeName__ = 'bool';
+  const boolFn = (value: PyValue) => this.isTruthy(value, scope);
+  (boolFn as PyValue).__typeName__ = 'bool';
   builtins.set('bool', boolFn);
-  builtins.set('type', (value: any) => ({ __typeName__: pyTypeName(value) }));
+  builtins.set('type', (value: PyValue) => ({ __typeName__: pyTypeName(value) }));
   const isSubclass = (klass: PyClass, target: PyClass): boolean => {
     if (klass === target) return true;
     return klass.bases.some((base) => isSubclass(base, target));
   };
-  builtins.set('isinstance', (value: any, typeObj: any) => {
+  builtins.set('isinstance', (value: PyValue, typeObj: PyValue) => {
     if (typeObj instanceof PyClass) {
       if (value instanceof PyInstance) return isSubclass(value.klass, typeObj);
       return false;
@@ -170,45 +170,45 @@ export function installBuiltins(this: VirtualMachine, scope: Scope) {
     }
     return false;
   });
-  builtins.set('enumerate', (iterable: any) => {
+  builtins.set('enumerate', (iterable: PyValue) => {
     const arr = Array.isArray(iterable) ? iterable : Array.from(iterable);
     return arr.map((v, i) => {
       const tup = [i, v];
-      (tup as any).__tuple__ = true;
+      (tup as PyValue).__tuple__ = true;
       return tup;
     });
   });
-  builtins.set('zip', (...iterables: any[]) => {
+  builtins.set('zip', (...iterables: PyValue[]) => {
     const arrays = iterables.map((it) => (Array.isArray(it) ? it : Array.from(it)));
     const length = Math.min(...arrays.map((a) => a.length));
-    const result: any[] = [];
+    const result: PyValue[] = [];
     for (let i = 0; i < length; i++) {
       const tup = arrays.map((a) => a[i]);
-      (tup as any).__tuple__ = true;
+      (tup as PyValue).__tuple__ = true;
       result.push(tup);
     }
     return result;
   });
-  builtins.set('sorted', (iterable: any) => {
+  builtins.set('sorted', (iterable: PyValue) => {
     const arr = Array.isArray(iterable) ? [...iterable] : Array.from(iterable);
     if (arr.every((v) => isNumericLike(v))) {
       return arr.sort((a, b) => toNumber(a) - toNumber(b));
     }
     return arr.sort();
   });
-  builtins.set('reversed', (iterable: any) => {
+  builtins.set('reversed', (iterable: PyValue) => {
     const arr = Array.isArray(iterable) ? [...iterable] : Array.from(iterable);
     return arr.reverse();
   });
-  builtins.set('map', (fn: any, iterable: any) => {
+  builtins.set('map', (fn: PyValue, iterable: PyValue) => {
     const arr = Array.isArray(iterable) ? iterable : Array.from(iterable);
     return arr.map((value) => this.callFunction(fn, [value], scope));
   });
-  builtins.set('filter', (fn: any, iterable: any) => {
+  builtins.set('filter', (fn: PyValue, iterable: PyValue) => {
     const arr = Array.isArray(iterable) ? iterable : Array.from(iterable);
     return arr.filter((value) => this.isTruthy(this.callFunction(fn, [value], scope), scope));
   });
-  builtins.set('next', (iterable: any) => {
+  builtins.set('next', (iterable: PyValue) => {
     if (iterable instanceof PyGenerator) {
       return iterable.next();
     }
@@ -219,7 +219,7 @@ export function installBuiltins(this: VirtualMachine, scope: Scope) {
     }
     throw new PyException('TypeError', 'object is not an iterator');
   });
-  builtins.set('open', (path: any, mode: any = 'r') => {
+  builtins.set('open', (path: PyValue, mode: PyValue = 'r') => {
     const file = new PyFile(String(path), String(mode));
     try {
       file.open();
