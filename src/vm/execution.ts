@@ -239,6 +239,66 @@ export function* executeStatementGenerator(this: VirtualMachine, node: any, scop
         : null;
       throw new ReturnSignal(value);
     }
+    case ASTNodeType.TRY_STATEMENT: {
+      let raised = false;
+      try {
+        yield* this.executeBlockGenerator(node.body, scope);
+      } catch (err) {
+        raised = true;
+        let handled = false;
+        for (const handler of node.handlers) {
+          if (!handler.exceptionType) {
+            handled = true;
+          } else if (err instanceof PyException) {
+            const expected = this.expressionHasYield(handler.exceptionType)
+              ? yield* this.evaluateExpressionGenerator(handler.exceptionType, scope)
+              : this.evaluateExpression(handler.exceptionType, scope);
+            if (expected instanceof PyClass && expected.isException && err.pyType === expected.name) {
+              handled = true;
+            } else if (expected instanceof PyInstance && expected.klass.isException && err.pyType === expected.klass.name) {
+              handled = true;
+            }
+          }
+          if (handled) {
+            if (handler.name) {
+              scope.set(handler.name, err instanceof PyException ? err : new PyException('Exception', String(err)));
+            }
+            yield* this.executeBlockGenerator(handler.body, scope);
+            break;
+          }
+        }
+        if (!handled) throw err;
+      } finally {
+        if (node.finalbody?.length) {
+          yield* this.executeBlockGenerator(node.finalbody, scope);
+        }
+      }
+      if (!raised && node.orelse?.length) {
+        yield* this.executeBlockGenerator(node.orelse, scope);
+      }
+      return null;
+    }
+    case ASTNodeType.WITH_STATEMENT: {
+      for (const item of node.items) {
+        const ctx = this.expressionHasYield(item.context)
+          ? yield* this.evaluateExpressionGenerator(item.context, scope)
+          : this.evaluateExpression(item.context, scope);
+        const enter = this.getAttribute(ctx, '__enter__', scope);
+        const exit = this.getAttribute(ctx, '__exit__', scope);
+        const value = this.callFunction(enter, [], scope);
+        if (item.target) {
+          this.assignTarget(item.target, value, scope);
+        }
+        try {
+          yield* this.executeBlockGenerator(node.body, scope);
+        } catch (err) {
+          this.callFunction(exit, [err], scope);
+          throw err;
+        }
+        this.callFunction(exit, [null, null, null], scope);
+      }
+      return null;
+    }
     case ASTNodeType.BREAK_STATEMENT:
       throw new BreakSignal();
     case ASTNodeType.CONTINUE_STATEMENT:

@@ -74,9 +74,16 @@ export function evaluateExpression(this: VirtualMachine, node: any, scope: Scope
     case ASTNodeType.SET_LITERAL:
       return new PySet(node.elements.map((el: any) => this.evaluateExpression(el, scope)));
     case ASTNodeType.DICT_LITERAL: {
-      const map = new PyDict();
+      const entries = [];
       for (const entry of node.entries) {
-        map.set(this.evaluateExpression(entry.key, scope), this.evaluateExpression(entry.value, scope));
+        entries.push({
+          key: this.evaluateExpression(entry.key, scope),
+          value: this.evaluateExpression(entry.value, scope),
+        });
+      }
+      const map = new PyDict();
+      for (const entry of entries) {
+        map.set(entry.key, entry.value);
       }
       return map;
     }
