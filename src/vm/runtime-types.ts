@@ -40,7 +40,7 @@ export class Frame {
   constructor(bytecode: ByteCode, scope: Scope) {
     this.bytecode = bytecode;
     this.scope = scope;
-    this.locals = new Array((bytecode.varnames || []).length).fill(undefined);
+    this.locals = new Array((bytecode.varnames || []).length);
   }
 }
 
@@ -128,6 +128,15 @@ export class Scope {
   }
 }
 
+export type FastCallInfo = {
+  paramNames: string[];
+  locals: Set<string>;
+  globals: Set<string> | null;
+  nonlocals: Set<string> | null;
+  useDirectSet: boolean;
+  argcount: number;
+};
+
 export class PyFunction {
   name: string;
   params: PyValue[];
@@ -137,6 +146,7 @@ export class PyFunction {
   isGenerator: boolean;
   bytecode?: ByteCode;
   localNames: Set<string>;
+  fastCall?: FastCallInfo | null;
 
   constructor(
     name: string,

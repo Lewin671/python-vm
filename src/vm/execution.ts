@@ -21,6 +21,7 @@ const pruneFStringCache = () => {
   }
 };
 const fastIteratorSymbol = Symbol('fastIterator');
+const callArgPools: PyValue[][][] = [[], [], [], [], []];
 
 export function execute(this: VirtualMachine, bytecode: ByteCode): PyValue {
   const globalScope = new Scope();
@@ -260,13 +261,21 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
 
         case OpCode.CALL_FUNCTION: {
           const argCount = arg!;
-          const args = new Array(argCount);
+          const pool = argCount <= 4 ? callArgPools[argCount] : null;
+          const args = pool && pool.length > 0 ? pool.pop()! : new Array(argCount);
           // Pop arguments in reverse order
           for (let i = argCount - 1; i >= 0; i--) {
             args[i] = stack.pop();
           }
           const func = stack.pop();
-          stack.push(this.callFunction(func, args, scope));
+          try {
+            stack.push(this.callFunction(func, args, scope));
+          } finally {
+            if (pool) {
+              args.length = 0;
+              pool.push(args);
+            }
+          }
           break;
         }
 

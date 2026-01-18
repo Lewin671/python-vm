@@ -1,6 +1,32 @@
 import type { VirtualMachine } from './vm';
 import { ASTNodeType } from '../types';
-import { PyValue, PyClass, PyDict, PyException, PyFunction, PyGenerator, PyInstance, ReturnSignal, Scope, Frame } from './runtime-types';
+import { FastCallInfo, PyValue, PyClass, PyDict, PyException, PyFunction, PyGenerator, PyInstance, ReturnSignal, Scope, Frame } from './runtime-types';
+
+const buildFastCallInfo = (func: PyFunction): FastCallInfo | null => {
+  if (!func.bytecode || !func.bytecode.instructions || func.isGenerator) return null;
+  const paramNames: string[] = [];
+  for (const param of func.params) {
+    if (param.type !== 'Param' || param.defaultValue || param.defaultEvaluated !== undefined) return null;
+    paramNames.push(param.name);
+  }
+  const locals = new Set(func.localNames);
+  if (func.bytecode.varnames) {
+    for (const name of func.bytecode.varnames) {
+      if (name !== undefined) locals.add(name);
+    }
+  }
+  const globals = func.bytecode.globals && func.bytecode.globals.length > 0 ? new Set(func.bytecode.globals) : null;
+  const nonlocals = func.bytecode.nonlocals && func.bytecode.nonlocals.length > 0 ? new Set(func.bytecode.nonlocals) : null;
+  const useDirectSet = (!globals || globals.size === 0) && (!nonlocals || nonlocals.size === 0);
+  return {
+    paramNames,
+    locals,
+    globals,
+    nonlocals,
+    useDirectSet,
+    argcount: func.bytecode.argcount,
+  };
+};
 
 export function callFunction(
   this: VirtualMachine,
@@ -10,10 +36,43 @@ export function callFunction(
   kwargs: Record<string, PyValue> = {}
 ): PyValue {
   // console.log('Calling', func, 'with', args);
-  if (!kwargs) {
-    kwargs = {};
-  }
+  const hasKwargs = kwargs ? Object.keys(kwargs).length > 0 : false;
   if (func instanceof PyFunction) {
+    if (func.fastCall === undefined) {
+      func.fastCall = buildFastCallInfo(func);
+    }
+    const fastCall = func.fastCall;
+    if (fastCall && !hasKwargs && args.length === fastCall.paramNames.length) {
+      const callScope = new Scope(func.closure);
+      callScope.parent = func.closure;
+      callScope.isClassScope = false;
+      callScope.locals = fastCall.locals;
+      if (fastCall.globals) {
+        callScope.globals = fastCall.globals;
+      }
+      if (fastCall.nonlocals) {
+        callScope.nonlocals = fastCall.nonlocals;
+      }
+      const setLocal = fastCall.useDirectSet
+        ? (name: string, value: PyValue) => {
+          callScope.values.set(name, value);
+        }
+        : (name: string, value: PyValue) => {
+          callScope.set(name, value);
+        };
+      for (let i = 0; i < fastCall.paramNames.length; i++) {
+        setLocal(fastCall.paramNames[i], args[i]);
+      }
+      const frame = new Frame(func.bytecode!, callScope);
+      const argcount = Math.min(fastCall.argcount, args.length);
+      for (let i = 0; i < argcount; i++) {
+        frame.locals[i] = args[i];
+      }
+      return this.executeFrame(frame);
+    }
+    if (!kwargs) {
+      kwargs = {};
+    }
     const callScope = new Scope(func.closure);
     callScope.locals = new Set(func.localNames);
     if (func.bytecode?.varnames) {
