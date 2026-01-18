@@ -1,6 +1,6 @@
 {
   "name": "@lewin671/python-vm",
-  "version": "0.1.5",
+  "version": "0.1.6",
   "description": "A powerful, high-performance Python 3 Virtual Machine and Compiler engineered in pure TypeScript.",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
