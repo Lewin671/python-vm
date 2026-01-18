@@ -39,12 +39,22 @@ export function installBuiltins(this: VirtualMachine, scope: Scope) {
       end = toNumber(args[1]);
       step = toNumber(args[2]);
     }
-    const result: number[] = [];
     if (step === 0) throw new PyException('ValueError', 'range() arg 3 must not be zero');
+    
+    // Pre-compute size and pre-allocate array for better performance
+    const size = step > 0 
+      ? Math.max(0, Math.ceil((end - start) / step))
+      : Math.max(0, Math.ceil((start - end) / (-step)));
+    
+    const result = new Array(size);
     if (step > 0) {
-      for (let i = start; i < end; i += step) result.push(i);
+      for (let idx = 0, i = start; idx < size; idx++, i += step) {
+        result[idx] = i;
+      }
     } else {
-      for (let i = start; i > end; i += step) result.push(i);
+      for (let idx = 0, i = start; idx < size; idx++, i += step) {
+        result[idx] = i;
+      }
     }
     return result;
   });
@@ -72,6 +82,29 @@ export function installBuiltins(this: VirtualMachine, scope: Scope) {
   (setFn as PyValue).__typeName__ = 'set';
   builtins.set('set', setFn);
   builtins.set('sum', (value: PyValue[]) => {
+    const len = value.length;
+    if (len === 0) return 0;
+    
+    // Fast path: check first element type and assume homogeneous array
+    const first = value[0];
+    if (typeof first === 'bigint') {
+      let sum = 0n;
+      for (let i = 0; i < len; i++) {
+        sum += toBigIntValue(value[i]);
+      }
+      return sum;
+    }
+    
+    // Fast path for numbers (most common case)
+    if (typeof first === 'number') {
+      let sum = 0;
+      for (let i = 0; i < len; i++) {
+        sum += value[i];
+      }
+      return sum;
+    }
+    
+    // Fallback for mixed types
     if (value.some((v) => typeof v === 'bigint')) {
       return value.reduce((acc, v) => acc + toBigIntValue(v), 0n);
     }

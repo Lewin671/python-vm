@@ -264,6 +264,133 @@ export function normalizeSliceStep(step: PyValue) {
 }
 
 export function getAttribute(this: VirtualMachine, obj: PyValue, name: string, scope: Scope): PyValue {
+  // Fast path for most common cases first
+  if (Array.isArray(obj)) {
+    // Pre-bound methods for arrays to avoid closure creation overhead
+    switch (name) {
+      case 'append': {
+        // Use a cached bound method when possible
+        const objAny = obj as PyValue;
+        let method = objAny.__append_method__;
+        if (!method) {
+          method = (value: PyValue) => { obj.push(value); return null; };
+          objAny.__append_method__ = method;
+        }
+        return method;
+      }
+      case 'pop': return (index?: number) => {
+        if (index === undefined) return obj.pop();
+        return obj.splice(index, 1)[0];
+      };
+      case 'extend': return (iterable: PyValue) => {
+        const arr = Array.isArray(iterable) ? iterable : Array.from(iterable);
+        obj.push(...arr);
+        return null;
+      };
+      case 'count': return (value: PyValue) => {
+        let count = 0;
+        for (let i = 0; i < obj.length; i++) {
+          if (obj[i] === value) count++;
+        }
+        return count;
+      };
+      case 'index': return (value: PyValue) => obj.indexOf(value);
+      case 'sort': {
+        return (...args: PyValue[]) => {
+          let kwargs: Record<string, PyValue> = {};
+          if (args.length > 0) {
+            const last = args[args.length - 1];
+            if (last && last.__kwargs__) {
+              kwargs = last.__kwargs__;
+              args = args.slice(0, -1);
+            }
+          }
+          let keyFn = args.length > 0 ? args[0] : null;
+          if ('key' in kwargs) keyFn = kwargs['key'];
+          const reverse = 'reverse' in kwargs ? Boolean(kwargs['reverse']) : false;
+
+          const initialLength = obj.length;
+          if (keyFn) {
+            const keyed = [];
+            for (let i = 0; i < initialLength; i++) {
+              const item = obj[i];
+              const key = this.callFunction(keyFn, [item], scope);
+              if (obj.length !== initialLength) {
+                throw new PyException('ValueError', 'list modified during sort');
+              }
+              keyed.push({ item, key });
+            }
+            keyed.sort((a, b) => {
+              if (isNumericLike(a.key) && isNumericLike(b.key)) {
+                return toNumber(a.key) - toNumber(b.key);
+              }
+              return String(a.key).localeCompare(String(b.key));
+            });
+            if (obj.length !== initialLength) {
+              throw new PyException('ValueError', 'list modified during sort');
+            }
+            obj.length = 0;
+            obj.push(...keyed.map((entry) => entry.item));
+          } else if (obj.every((value: PyValue) => isNumericLike(value))) {
+            obj.sort((a: PyValue, b: PyValue) => toNumber(a) - toNumber(b));
+            if (obj.length !== initialLength) {
+              throw new PyException('ValueError', 'list modified during sort');
+            }
+          } else {
+            obj.sort();
+            if (obj.length !== initialLength) {
+              throw new PyException('ValueError', 'list modified during sort');
+            }
+          }
+          if (reverse) obj.reverse();
+          return null;
+        };
+      }
+    }
+  }
+  
+  if (typeof obj === 'string') {
+    switch (name) {
+      case 'upper': return () => obj.toUpperCase();
+      case 'lower': return () => obj.toLowerCase();
+      case 'strip': return () => obj.trim();
+      case 'startswith': return (prefix: string) => obj.startsWith(prefix);
+      case 'endswith': return (suffix: string) => obj.endsWith(suffix);
+      case 'split': return (sep: string = ' ') => obj.split(sep);
+      case 'count': return (ch: PyValue) => obj.split(ch).length - 1;
+      case 'join': return (iterable: PyValue) => {
+        const arr = Array.isArray(iterable) ? iterable : Array.from(iterable);
+        return arr.map(item => pyStr(item)).join(obj);
+      };
+      case 'replace': return (a: PyValue, b: PyValue) => obj.replace(a, b);
+      case 'format': return (...args: PyValue[]) => {
+        let kwargs: Record<string, PyValue> = {};
+        if (args.length > 0) {
+          const last = args[args.length - 1];
+          if (last && last.__kwargs__) {
+            kwargs = last.__kwargs__;
+            args = args.slice(0, -1);
+          }
+        }
+        let autoIndex = 0;
+        return obj.replace(/\{([^{}]*)\}/g, (_match, key) => {
+          if (key === '') {
+            const value = args[autoIndex++];
+            return pyStr(value);
+          }
+          if (/^\d+$/.test(key)) {
+            const value = args[parseInt(key, 10)];
+            return pyStr(value);
+          }
+          if (key in kwargs) {
+            return pyStr(kwargs[key]);
+          }
+          return '';
+        });
+      };
+    }
+  }
+  
   if (obj && obj.__moduleScope__) {
     if (obj.__moduleScope__.values.has(name)) {
       return obj.__moduleScope__.values.get(name);
@@ -294,118 +421,6 @@ export function getAttribute(this: VirtualMachine, obj: PyValue, name: string, s
   if (isComplex(obj)) {
     if (name === 'real') return new Number(obj.re);
     if (name === 'imag') return new Number(obj.im);
-  }
-  if (typeof obj === 'string') {
-    if (name === 'upper') return () => obj.toUpperCase();
-    if (name === 'join') return (iterable: PyValue) => {
-      const arr = Array.isArray(iterable) ? iterable : Array.from(iterable);
-      return arr.map(item => pyStr(item)).join(obj);
-    };
-    if (name === 'replace')
-      return (a: PyValue, b: PyValue) => {
-        return obj.replace(a, b);
-      };
-    if (name === 'format')
-      return (...args: PyValue[]) => {
-        let kwargs: Record<string, PyValue> = {};
-        if (args.length > 0) {
-          const last = args[args.length - 1];
-          if (last && last.__kwargs__) {
-            kwargs = last.__kwargs__;
-            args = args.slice(0, -1);
-          }
-        }
-        let autoIndex = 0;
-        return obj.replace(/\{([^{}]*)\}/g, (_match, key) => {
-          if (key === '') {
-            const value = args[autoIndex++];
-            return pyStr(value);
-          }
-          if (/^\d+$/.test(key)) {
-            const value = args[parseInt(key, 10)];
-            return pyStr(value);
-          }
-          if (key in kwargs) {
-            return pyStr(kwargs[key]);
-          }
-          return '';
-        });
-      };
-    if (name === 'count') return (ch: PyValue) => obj.split(ch).length - 1;
-    if (name === 'split') return (sep: string = ' ') => obj.split(sep);
-    if (name === 'strip') return () => obj.trim();
-    if (name === 'lower') return () => obj.toLowerCase();
-    if (name === 'startswith') return (prefix: string) => obj.startsWith(prefix);
-    if (name === 'endswith') return (suffix: string) => obj.endsWith(suffix);
-  }
-  if (Array.isArray(obj)) {
-    if (name === 'append')
-      return (value: PyValue) => {
-        obj.push(value);
-        return null;
-      };
-    if (name === 'pop') return (index?: number) => {
-      if (index === undefined) return obj.pop();
-      return obj.splice(index, 1)[0];
-    };
-    if (name === 'extend') return (iterable: PyValue) => {
-      const arr = Array.isArray(iterable) ? iterable : Array.from(iterable);
-      obj.push(...arr);
-      return null;
-    };
-    if (name === 'count') return (value: PyValue) => obj.filter((item: PyValue) => item === value).length;
-    if (name === 'index') return (value: PyValue) => obj.indexOf(value);
-    if (name === 'sort') {
-      return (...args: PyValue[]) => {
-        let kwargs: Record<string, PyValue> = {};
-        if (args.length > 0) {
-          const last = args[args.length - 1];
-          if (last && last.__kwargs__) {
-            kwargs = last.__kwargs__;
-            args = args.slice(0, -1);
-          }
-        }
-        let keyFn = args.length > 0 ? args[0] : null;
-        if ('key' in kwargs) keyFn = kwargs['key'];
-        const reverse = 'reverse' in kwargs ? Boolean(kwargs['reverse']) : false;
-
-        const initialLength = obj.length;
-        if (keyFn) {
-          const keyed = [];
-          for (let i = 0; i < initialLength; i++) {
-            const item = obj[i];
-            const key = this.callFunction(keyFn, [item], scope);
-            if (obj.length !== initialLength) {
-              throw new PyException('ValueError', 'list modified during sort');
-            }
-            keyed.push({ item, key });
-          }
-          keyed.sort((a, b) => {
-            if (isNumericLike(a.key) && isNumericLike(b.key)) {
-              return toNumber(a.key) - toNumber(b.key);
-            }
-            return String(a.key).localeCompare(String(b.key));
-          });
-          if (obj.length !== initialLength) {
-            throw new PyException('ValueError', 'list modified during sort');
-          }
-          obj.length = 0;
-          obj.push(...keyed.map((entry) => entry.item));
-        } else if (obj.every((value: PyValue) => isNumericLike(value))) {
-          obj.sort((a: PyValue, b: PyValue) => toNumber(a) - toNumber(b));
-          if (obj.length !== initialLength) {
-            throw new PyException('ValueError', 'list modified during sort');
-          }
-        } else {
-          obj.sort();
-          if (obj.length !== initialLength) {
-            throw new PyException('ValueError', 'list modified during sort');
-          }
-        }
-        if (reverse) obj.reverse();
-        return null;
-      };
-    }
   }
   if (obj instanceof PyDict) {
     if (name === 'items')

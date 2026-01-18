@@ -7,29 +7,97 @@ export function callFunction(
   func: PyValue,
   args: PyValue[],
   scope: Scope,
-  kwargs: Record<string, PyValue> = {}
+  kwargs?: Record<string, PyValue>
 ): PyValue {
-  // console.log('Calling', func, 'with', args);
-  if (!kwargs) {
-    kwargs = {};
+  // Fast path for native JS functions (most common for builtins)
+  if (typeof func === 'function') {
+    if (kwargs && Object.keys(kwargs).length > 0) {
+      return func(...args, { __kwargs__: kwargs });
+    }
+    return func(...args);
   }
+  
   if (func instanceof PyFunction) {
-    const callScope = new Scope(func.closure);
-    callScope.locals = new Set(func.localNames);
-    if (func.bytecode) {
-      if (func.bytecode.globals) {
-        func.bytecode.globals.forEach((g: string) => callScope.globals.add(g));
+    // Fast path for simple bytecode functions (no kwargs, no varargs, no generators)
+    const bc = func.bytecode;
+    const params = func.params;
+    const paramLen = params.length;
+    const hasKwargs = kwargs && Object.keys(kwargs).length > 0;
+    
+    // Check if we can use the fast path
+    const canUseFastPath = bc && bc.instructions && !func.isGenerator && !hasKwargs &&
+      args.length === paramLen && paramLen > 0 && 
+      params.every((p: PyValue) => p.type === 'Param');
+    
+    if (canUseFastPath) {
+      // Fast path: create scope and frame with minimal allocations
+      const callScope = new Scope(func.closure);
+      const scopeValues = callScope.values;
+      
+      // Directly set locals - avoid Set creation for locals when not needed
+      if (func.localNames.size > 0) {
+        callScope.locals = func.localNames;
       }
-      if (func.bytecode.nonlocals) {
-        func.bytecode.nonlocals.forEach((n: string) => callScope.nonlocals.add(n));
+      
+      // Directly copy globals/nonlocals from bytecode (use Sets directly)
+      if (bc.globals) {
+        const globals = callScope.globals;
+        for (let i = 0; i < bc.globals.length; i++) {
+          globals.add(bc.globals[i]);
+        }
+      }
+      if (bc.nonlocals) {
+        const nonlocals = callScope.nonlocals;
+        for (let i = 0; i < bc.nonlocals.length; i++) {
+          nonlocals.add(bc.nonlocals[i]);
+        }
+      }
+      
+      // Set parameters directly in scope
+      for (let i = 0; i < paramLen; i++) {
+        scopeValues.set(params[i].name, args[i]);
+      }
+      
+      // Create frame and populate locals array
+      const frame = new Frame(bc, callScope);
+      const frameLocals = frame.locals;
+      const argcount = bc.argcount || 0;
+      const varnames = bc.varnames;
+      for (let i = 0; i < argcount; i++) {
+        frameLocals[i] = scopeValues.get(varnames[i]);
+      }
+      
+      return this.executeFrame(frame);
+    }
+    
+    // Slow path for complex cases
+    const callScope = new Scope(func.closure);
+    if (func.localNames.size > 0) {
+      callScope.locals = new Set(func.localNames);
+    }
+    if (bc) {
+      if (bc.globals) {
+        const globals = callScope.globals;
+        for (let i = 0; i < bc.globals.length; i++) {
+          globals.add(bc.globals[i]);
+        }
+      }
+      if (bc.nonlocals) {
+        const nonlocals = callScope.nonlocals;
+        for (let i = 0; i < bc.nonlocals.length; i++) {
+          nonlocals.add(bc.nonlocals[i]);
+        }
       }
     }
-    for (const param of func.params) {
+    
+    let argIndex = 0;
+    for (let i = 0; i < paramLen; i++) {
+      const param = params[i];
       if (param.type === 'Param') {
         let argValue: PyValue;
-        if (args.length > 0) {
-          argValue = args.shift();
-        } else if (param.name in kwargs) {
+        if (argIndex < args.length) {
+          argValue = args[argIndex++];
+        } else if (kwargs && param.name in kwargs) {
           argValue = kwargs[param.name];
           delete kwargs[param.name];
         } else if (param.defaultEvaluated !== undefined) {
@@ -39,31 +107,38 @@ export function callFunction(
         } else {
           argValue = null;
         }
-        callScope.set(param.name, argValue);
+        callScope.values.set(param.name, argValue);
       } else if (param.type === 'VarArg') {
-        const varArgs = [...args];
+        const varArgs = args.slice(argIndex);
         (varArgs as PyValue).__tuple__ = true;
-        callScope.set(param.name, varArgs);
-        args = [];
+        callScope.values.set(param.name, varArgs);
+        argIndex = args.length;
       } else if (param.type === 'KwArg') {
         const kwDict = new PyDict();
-        for (const [key, value] of Object.entries(kwargs)) {
-          kwDict.set(key, value);
+        if (kwargs) {
+          for (const key in kwargs) {
+            if (Object.prototype.hasOwnProperty.call(kwargs, key)) {
+              kwDict.set(key, kwargs[key]);
+            }
+          }
         }
-        callScope.set(param.name, kwDict);
-        kwargs = {};
+        callScope.values.set(param.name, kwDict);
       }
     }
+    
     try {
       if (func.isGenerator) {
         const iterator = this.executeBlockGenerator(func.body, callScope);
         return new PyGenerator(iterator);
       }
-      if (func.bytecode && func.bytecode.instructions) {
-        const frame = new Frame(func.bytecode, callScope);
-        for (let i = 0; i < (func.bytecode.argcount || 0); i++) {
-          const varname = func.bytecode.varnames[i];
-          frame.locals[i] = callScope.values.get(varname);
+      if (bc && bc.instructions) {
+        const frame = new Frame(bc, callScope);
+        const argcount = bc.argcount || 0;
+        const varnames = bc.varnames;
+        const frameLocals = frame.locals;
+        const scopeValues = callScope.values;
+        for (let i = 0; i < argcount; i++) {
+          frameLocals[i] = scopeValues.get(varnames[i]);
         }
         return this.executeFrame(frame);
       }
@@ -74,6 +149,7 @@ export function callFunction(
       throw err;
     }
   }
+  
   if (func instanceof PyClass) {
     const instance = new PyInstance(func);
     if (func.isException && args.length > 0) {
@@ -85,12 +161,7 @@ export function callFunction(
     }
     return instance;
   }
-  if (typeof func === 'function') {
-    if (Object.keys(kwargs).length > 0) {
-      return func(...args, { __kwargs__: kwargs });
-    }
-    return func(...args);
-  }
+  
   throw new PyException('TypeError', 'object is not callable');
 }
 

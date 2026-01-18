@@ -192,25 +192,18 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
         case OpCode.COMPARE_OP: {
           const b = stack.pop();
           const a = stack.pop();
-          // Fast path for simple integer comparisons
+          // Fast path for simple integer comparisons (avoid function call overhead)
           if (typeof a === 'number' && typeof b === 'number') {
-            let result: boolean | undefined = undefined;
-            switch (arg as CompareOp) {
-              case CompareOp.LT: result = a < b; break;
-              case CompareOp.LE: result = a <= b; break;
-              case CompareOp.EQ: result = a === b; break;
-              case CompareOp.NE: result = a !== b; break;
-              case CompareOp.GT: result = a > b; break;
-              case CompareOp.GE: result = a >= b; break;
-            }
-            if (result !== undefined) {
-              stack.push(result);
-            } else {
-              stack.push(this.applyCompare(arg as CompareOp, a, b));
-            }
-          } else {
-            stack.push(this.applyCompare(arg as CompareOp, a, b));
+            const op = arg as CompareOp;
+            if (op === CompareOp.LT) { stack.push(a < b); break; }
+            if (op === CompareOp.LE) { stack.push(a <= b); break; }
+            if (op === CompareOp.EQ) { stack.push(a === b); break; }
+            if (op === CompareOp.NE) { stack.push(a !== b); break; }
+            if (op === CompareOp.GT) { stack.push(a > b); break; }
+            if (op === CompareOp.GE) { stack.push(a >= b); break; }
+            // For other ops (IN, NOT_IN, IS, IS_NOT), fall through to applyCompare
           }
+          stack.push(this.applyCompare(arg as CompareOp, a, b));
           break;
         }
 

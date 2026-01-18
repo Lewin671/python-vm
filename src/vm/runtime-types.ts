@@ -34,13 +34,15 @@ export class Frame {
   public pc: number = 0;
   public scope: Scope;
   public bytecode: ByteCode;
-  public locals: PyValue[] = [];
+  public locals: PyValue[];
   public blockStack: Array<{ handler: number; stackHeight: number }> = [];
 
   constructor(bytecode: ByteCode, scope: Scope) {
     this.bytecode = bytecode;
     this.scope = scope;
-    this.locals = new Array((bytecode.varnames || []).length).fill(undefined);
+    // Pre-allocate locals array without fill (faster than fill(undefined))
+    const varLen = bytecode.varnames ? bytecode.varnames.length : 0;
+    this.locals = varLen > 0 ? new Array(varLen) : [];
   }
 }
 
@@ -51,6 +53,8 @@ export class Scope {
   nonlocals: Set<string> = new Set();
   locals: Set<string> = new Set();
   isClassScope: boolean = false;
+  // Cache for root scope to avoid traversal
+  private _root: Scope | null = null;
 
   constructor(parent: Scope | null = null, isClassScope: boolean = false) {
     this.parent = parent;
@@ -58,31 +62,48 @@ export class Scope {
   }
 
   get(name: string): ScopeValue {
-    if (this.values.has(name)) {
-      return this.values.get(name);
+    // Fast path: check local values first (most common case)
+    const value = this.values.get(name);
+    if (value !== undefined) {
+      return value;
     }
-    if (this.locals.has(name)) {
+    
+    // Check if explicitly declared as local but unassigned
+    if (this.locals.size > 0 && this.locals.has(name)) {
       throw new PyException('UnboundLocalError', `local variable '${name}' referenced before assignment`);
     }
 
-    if (this.nonlocals.has(name) && this.parent) {
+    // Handle nonlocal lookup
+    if (this.nonlocals.size > 0 && this.nonlocals.has(name) && this.parent) {
       const scope = this.findScopeWith(name, true);
-      // If we found a scope, return the actual reference from its Map
       if (scope) return scope.values.get(name);
     }
 
+    // Walk up parent chain (skip class scopes)
     let p: Scope | null = this.parent;
-    while (p && p.isClassScope) {
+    while (p) {
+      if (!p.isClassScope) {
+        const val = p.values.get(name);
+        if (val !== undefined) {
+          return val;
+        }
+        if (p.locals.size > 0 && p.locals.has(name)) {
+          throw new PyException('UnboundLocalError', `local variable '${name}' referenced before assignment`);
+        }
+      }
       p = p.parent;
     }
-
-    if (p) {
-      return p.get(name);
-    }
+    
     throw new PyException('NameError', `name '${name}' is not defined`);
   }
 
   set(name: string, value: ScopeValue): void {
+    // Fast path: no globals or nonlocals
+    if (this.globals.size === 0 && this.nonlocals.size === 0) {
+      this.values.set(name, value);
+      return;
+    }
+    
     if (this.globals.has(name) && this.parent) {
       this.root().values.set(name, value);
       return;
@@ -92,11 +113,6 @@ export class Scope {
       if (!scope) {
         throw new PyException('NameError', `no binding for nonlocal '${name}' found`);
       }
-      // Debug: log the scope chain
-      if (process.env['DEBUG_NONLOCAL']) {
-        console.log(`Setting nonlocal ${name} = ${value}`);
-        console.log(`Found scope:`, scope.values.has(name), scope.values.get(name));
-      }
       scope.values.set(name, value);
       return;
     }
@@ -104,11 +120,13 @@ export class Scope {
   }
 
   root(): Scope {
+    if (this._root) return this._root;
     // eslint-disable-next-line @typescript-eslint/no-this-alias
     let current: Scope = this;
     while (current.parent) {
       current = current.parent;
     }
+    this._root = current;
     return current;
   }
 
@@ -121,7 +139,7 @@ export class Scope {
         continue;
       }
       if (scope.values.has(name)) return scope;
-      if (scope.locals.has(name)) return scope;
+      if (scope.locals.size > 0 && scope.locals.has(name)) return scope;
       scope = scope.parent;
     }
     return null;
@@ -243,6 +261,18 @@ export class PyDict {
   }
 
   set(key: PyValue, value: PyValue): this {
+    // Fast path for strings (most common case in benchmarks)
+    if (typeof key === 'string') {
+      const id = `s:${key}`;
+      const existing = this.primitiveStore.get(id);
+      if (existing) {
+        existing.value = value;
+      } else {
+        this.primitiveStore.set(id, { key, value });
+      }
+      return this;
+    }
+    
     const info = this.keyInfo(key);
     const existing = info.store.get(info.id);
     if (existing) {
@@ -254,12 +284,23 @@ export class PyDict {
   }
 
   get(key: PyValue): PyValue {
+    // Fast path for strings
+    if (typeof key === 'string') {
+      const entry = this.primitiveStore.get(`s:${key}`);
+      return entry ? entry.value : undefined;
+    }
+    
     const info = this.keyInfo(key);
     const entry = info.store.get(info.id);
     return entry ? entry.value : undefined;
   }
 
   has(key: PyValue): boolean {
+    // Fast path for strings
+    if (typeof key === 'string') {
+      return this.primitiveStore.has(`s:${key}`);
+    }
+    
     const info = this.keyInfo(key);
     return info.store.has(info.id);
   }
