@@ -242,12 +242,16 @@ export class PyRange {
     this.start = start;
     this.end = end;
     this.step = step;
-    const span = step > 0 ? end - start : start - end;
-    const stepSize = Math.abs(step);
-    this.length = span > 0 ? Math.ceil(span / stepSize) : 0;
+    if (step > 0) {
+      const span = end - start;
+      this.length = span > 0 ? Math.ceil(span / step) : 0;
+    } else {
+      const span = start - end;
+      this.length = span > 0 ? Math.ceil(span / -step) : 0;
+    }
   }
 
-  [Symbol.iterator](): Iterator<number> {
+  [Symbol.iterator](): Iterator<number | null> {
     return new PyRangeIterator(this.start, this.end, this.step);
   }
 }
@@ -263,16 +267,16 @@ class PyRangeIterator {
     this.step = step;
   }
 
-  next(): IteratorResult<number> {
+  next(): IteratorResult<number | null> {
     if (this.step > 0 ? this.current < this.end : this.current > this.end) {
       const value = this.current;
       this.current += this.step;
       return { value, done: false };
     }
-    return { value: undefined, done: true };
+    return { value: null, done: true };
   }
 
-  [Symbol.iterator](): Iterator<number> {
+  [Symbol.iterator](): Iterator<number | null> {
     return this;
   }
 }

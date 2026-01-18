@@ -31,13 +31,22 @@ export function callFunction(
         func.bytecode.nonlocals.forEach((n: string) => callScope.nonlocals.add(n));
       }
     }
+    const useDirectSet = callScope.globals.size === 0 && callScope.nonlocals.size === 0;
+    const setLocal = useDirectSet
+      ? (name: string, value: PyValue) => {
+        callScope.values.set(name, value);
+      }
+      : (name: string, value: PyValue) => {
+        callScope.set(name, value);
+      };
     let argIndex = 0;
     const argsLength = args.length;
     for (const param of func.params) {
       if (param.type === 'Param') {
         let argValue: PyValue;
         if (argIndex < argsLength) {
-          argValue = args[argIndex++];
+          argValue = args[argIndex];
+          argIndex += 1;
         } else if (param.name in kwargs) {
           argValue = kwargs[param.name];
           delete kwargs[param.name];
@@ -48,18 +57,18 @@ export function callFunction(
         } else {
           argValue = null;
         }
-        callScope.set(param.name, argValue);
+        setLocal(param.name, argValue);
       } else if (param.type === 'VarArg') {
         const varArgs = args.slice(argIndex);
         (varArgs as PyValue).__tuple__ = true;
-        callScope.set(param.name, varArgs);
+        setLocal(param.name, varArgs);
         argIndex = argsLength;
       } else if (param.type === 'KwArg') {
         const kwDict = new PyDict();
         for (const [key, value] of Object.entries(kwargs)) {
           kwDict.set(key, value);
         }
-        callScope.set(param.name, kwDict);
+        setLocal(param.name, kwDict);
         kwargs = {};
       }
     }

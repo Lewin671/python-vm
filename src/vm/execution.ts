@@ -2,6 +2,26 @@ import type { VirtualMachine } from './vm';
 import { ByteCode, OpCode, ASTNodeType, CompareOp } from '../types';
 import { PyValue, PyClass, PyDict, PyException, PyFunction, PyInstance, PyRange, PySet, Scope, Frame } from './runtime-types';
 
+type FStringPart =
+  | { kind: 'text'; value: string }
+  | { kind: 'expr'; expr: string; spec: string };
+
+type FStringCacheEntry = { parts: FStringPart[]; lastAccess: number };
+const fStringCache = new Map<string, FStringCacheEntry>();
+const FSTRING_CACHE_LIMIT = 1000;
+let fStringAccessCounter = 0;
+const pruneFStringCache = () => {
+  if (fStringCache.size <= FSTRING_CACHE_LIMIT) return;
+  const targetSize = Math.floor(FSTRING_CACHE_LIMIT * 0.8);
+  const entries = Array.from(fStringCache.entries());
+  entries.sort((a, b) => a[1].lastAccess - b[1].lastAccess);
+  const removeCount = entries.length - targetSize;
+  for (let i = 0; i < removeCount; i++) {
+    fStringCache.delete(entries[i][0]);
+  }
+};
+const fastIteratorSymbol = Symbol('fastIterator');
+
 export function execute(this: VirtualMachine, bytecode: ByteCode): PyValue {
   const globalScope = new Scope();
   this.installBuiltins(globalScope);
@@ -34,34 +54,92 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
   const scope = frame.scope;
   const scopeValues = scope.values;
   const syncLocals = varnames ? varnames.map((name) => name !== undefined && scopeValues.has(name)) : null;
+  const unsyncedLocals = syncLocals
+    ? syncLocals.reduce((acc: number[], synced, index) => {
+      if (!synced) acc.push(index);
+      return acc;
+    }, [])
+    : null;
+  let scopeValueSize = scopeValues.size;
+  const refreshLocalsSync = () => {
+    if (!syncLocals || !unsyncedLocals || unsyncedLocals.length === 0) return;
+    if (scopeValues.size === scopeValueSize) return;
+    scopeValueSize = scopeValues.size;
+    for (let i = unsyncedLocals.length - 1; i >= 0; i--) {
+      const idx = unsyncedLocals[i];
+      const name = varnames[idx];
+      if (name !== undefined && scopeValues.has(name)) {
+        syncLocals[idx] = true;
+        // Swap-with-last removal to avoid shifting the entire array.
+        unsyncedLocals[i] = unsyncedLocals[unsyncedLocals.length - 1];
+        unsyncedLocals.pop();
+      }
+    }
+  };
   const iterSymbol = Symbol.iterator;
 
   const renderFString = (template: string, scope: Scope): string => {
-    return template.replace(/\{([^}]+)\}/g, (_m, expr) => {
-      const { rawExpr, rawSpec } = this.splitFormatSpec(expr);
-      // Create a temporary scope that includes local variables for f-string evaluation
-      const evalScope = new Scope(scope);
-      if (varnames) {
-        for (let i = 0; i < varnames.length; i++) {
-          const varname = varnames[i];
-          if (varname === undefined) continue;
-          if (scope.values.has(varname)) {
-            const val = scope.values.get(varname);
-            if (process.env['DEBUG_NONLOCAL']) {
-              console.log(`renderFString: varname=${varname}, scope.values.get=${val}`);
-            }
-            evalScope.values.set(varname, val);
-          } else if (locals[i] !== undefined) {
-            if (process.env['DEBUG_NONLOCAL']) {
-              console.log(`renderFString: varname=${varname}, locals[${i}]=${locals[i]}`);
-            }
-            evalScope.values.set(varname, locals[i]);
+    let entry = fStringCache.get(template);
+    let parts: FStringPart[];
+    if (!entry) {
+      parts = [];
+      const regex = /\{([^}]+)\}/g;
+      let lastIndex = 0;
+      let match: RegExpExecArray | null;
+      while ((match = regex.exec(template)) !== null) {
+        if (match.index > lastIndex) {
+          parts.push({ kind: 'text', value: template.slice(lastIndex, match.index) });
+        }
+        const { rawExpr, rawSpec } = this.splitFormatSpec(match[1]);
+        parts.push({ kind: 'expr', expr: rawExpr.trim(), spec: rawSpec ? rawSpec.trim() : '' });
+        lastIndex = regex.lastIndex;
+      }
+      if (lastIndex < template.length) {
+        parts.push({ kind: 'text', value: template.slice(lastIndex) });
+      }
+      entry = {
+        parts,
+        lastAccess: fStringCache.size >= FSTRING_CACHE_LIMIT ? ++fStringAccessCounter : 0,
+      };
+      fStringCache.set(template, entry);
+      pruneFStringCache();
+    } else {
+      if (fStringCache.size >= FSTRING_CACHE_LIMIT) {
+        entry.lastAccess = ++fStringAccessCounter;
+      }
+      parts = entry.parts;
+    }
+
+    const evalScope = new Scope(scope);
+    if (varnames) {
+      for (let i = 0; i < varnames.length; i++) {
+        const varname = varnames[i];
+        if (varname === undefined) continue;
+        if (scope.values.has(varname)) {
+          const val = scope.values.get(varname);
+          if (process.env['DEBUG_NONLOCAL']) {
+            console.log(`renderFString: varname=${varname}, scope.values.get=${val}`);
           }
+          evalScope.values.set(varname, val);
+        } else if (locals[i] !== undefined) {
+          if (process.env['DEBUG_NONLOCAL']) {
+            console.log(`renderFString: varname=${varname}, locals[${i}]=${locals[i]}`);
+          }
+          evalScope.values.set(varname, locals[i]);
         }
       }
-      const inner = this.evaluateExpressionString(rawExpr.trim(), evalScope);
-      return this.applyFormatSpec(inner, rawSpec ? rawSpec.trim() : '');
-    });
+    }
+
+    let result = '';
+    for (const part of parts) {
+      if (part.kind === 'text') {
+        result += part.value;
+      } else {
+        const inner = this.evaluateExpressionString(part.expr, evalScope);
+        result += this.applyFormatSpec(inner, part.spec);
+      }
+    }
+    return result;
   };
 
   const normalizeThrown = (err: PyValue): PyValue => {
@@ -108,7 +186,12 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
           let val = locals[arg!];
           if (val === undefined) {
             // Check scope values as fallback
+            refreshLocalsSync();
             if (syncLocals && syncLocals[arg!]) {
+              val = scopeValues.get(varnames[arg!]!);
+              locals[arg!] = val;
+            } else if (varnames && varnames[arg!] !== undefined && scopeValues.has(varnames[arg!]!)) {
+              if (syncLocals) syncLocals[arg!] = true;
               val = scopeValues.get(varnames[arg!]!);
               locals[arg!] = val;
             } else {
@@ -237,8 +320,11 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
         case OpCode.STORE_FAST: {
           const val = stack.pop();
           locals[arg!] = val;
-          if (syncLocals && syncLocals[arg!]) {
-            scopeValues.set(varnames[arg!]!, val);
+          if (syncLocals) {
+            refreshLocalsSync();
+            if (syncLocals[arg!]) {
+              scopeValues.set(varnames[arg!]!, val);
+            }
           }
           break;
         }
@@ -249,7 +335,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
 
         case OpCode.FOR_ITER: {
           const iter = stack[stack.length - 1];
-          if (iter && iter.__fastIter__ === 'array') {
+          if (iter && iter[fastIteratorSymbol] === 'array') {
             const idx = iter.index;
             if (idx >= iter.data.length) {
               stack.pop();
@@ -260,7 +346,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
             }
             break;
           }
-          if (iter && iter.__fastIter__ === 'range') {
+          if (iter && iter[fastIteratorSymbol] === 'range') {
             const current = iter.current;
             if (iter.step > 0 ? current < iter.end : current > iter.end) {
               stack.push(current);
@@ -328,9 +414,9 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
         case OpCode.GET_ITER: {
           const obj = stack.pop();
           if (Array.isArray(obj)) {
-            stack.push({ __fastIter__: 'array', data: obj, index: 0 });
+            stack.push({ [fastIteratorSymbol]: 'array', data: obj, index: 0 });
           } else if (obj instanceof PyRange) {
-            stack.push({ __fastIter__: 'range', current: obj.start, end: obj.end, step: obj.step });
+            stack.push({ [fastIteratorSymbol]: 'range', current: obj.start, end: obj.end, step: obj.step });
           } else if (obj && typeof obj[iterSymbol] === 'function') {
             stack.push(obj[iterSymbol]());
           } else {

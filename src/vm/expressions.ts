@@ -272,26 +272,53 @@ export function evaluateExpression(this: VirtualMachine, node: PyValue, scope: S
   }
 }
 
-const expressionCache = new Map<string, PyValue | null>();
+type ExpressionCacheEntry =
+  | { kind: 'ast'; value: PyValue; lastAccess: number }
+  | { kind: 'inline'; lastAccess: number };
+const expressionCache = new Map<string, ExpressionCacheEntry>();
+const EXPRESSION_CACHE_LIMIT = 2000;
+let expressionAccessCounter = 0;
+const pruneExpressionCache = () => {
+  if (expressionCache.size <= EXPRESSION_CACHE_LIMIT) return;
+  const targetSize = Math.floor(EXPRESSION_CACHE_LIMIT * 0.8);
+  const entries = Array.from(expressionCache.entries());
+  entries.sort((a, b) => a[1].lastAccess - b[1].lastAccess);
+  const removeCount = entries.length - targetSize;
+  for (let i = 0; i < removeCount; i++) {
+    expressionCache.delete(entries[i][0]);
+  }
+};
 
 export function evaluateExpressionString(this: VirtualMachine, expr: string, scope: Scope): PyValue {
   const trimmed = expr.trim();
   const cached = expressionCache.get(trimmed);
-  if (cached !== undefined) {
-    if (cached === null) {
+  if (cached) {
+    if (expressionCache.size >= EXPRESSION_CACHE_LIMIT) {
+      cached.lastAccess = ++expressionAccessCounter;
+    }
+    if (cached.kind === 'inline') {
       return this.executeExpressionInline(trimmed, scope);
     }
-    return this.evaluateExpression(cached, scope);
+    return this.evaluateExpression(cached.value, scope);
   }
   const wrapped = `__f = ${expr} \n`;
   const tokens = new Lexer(wrapped).tokenize();
   const ast = new Parser(tokens).parse();
   const assignment = (ast as Program).body[0];
   if (!assignment || assignment.type !== ASTNodeType.ASSIGNMENT) {
-    expressionCache.set(trimmed, null);
+    expressionCache.set(trimmed, {
+      kind: 'inline',
+      lastAccess: expressionCache.size >= EXPRESSION_CACHE_LIMIT ? ++expressionAccessCounter : 0,
+    });
+    pruneExpressionCache();
     return this.executeExpressionInline(expr, scope);
   }
-  expressionCache.set(trimmed, assignment.value);
+  expressionCache.set(trimmed, {
+    kind: 'ast',
+    value: assignment.value,
+    lastAccess: expressionCache.size >= EXPRESSION_CACHE_LIMIT ? ++expressionAccessCounter : 0,
+  });
+  pruneExpressionCache();
   return this.evaluateExpression(assignment.value, scope);
 }
 
