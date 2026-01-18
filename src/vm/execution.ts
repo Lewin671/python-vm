@@ -201,6 +201,7 @@ export function executeFrame(this: VirtualMachine, frame: Frame): PyValue {
             if (op === CompareOp.NE) { stack.push(a !== b); break; }
             if (op === CompareOp.GT) { stack.push(a > b); break; }
             if (op === CompareOp.GE) { stack.push(a >= b); break; }
+            // For other ops (IN, NOT_IN, IS, IS_NOT), fall through to applyCompare
           }
           stack.push(this.applyCompare(arg as CompareOp, a, b));
           break;
