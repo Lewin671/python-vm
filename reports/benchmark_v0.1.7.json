@@ -1,0 +1,73 @@
+{
+  "vmName": "@lewin671/python-vm",
+  "vmVersion": "0.1.7",
+  "timestamp": "2026-01-18T06:58:36.856Z",
+  "pythonVersion": "Python 3.13.4",
+  "averageRatio": 7.392770123962441,
+  "correctnessRate": 1,
+  "results": [
+    {
+      "name": "Fibonacci(30)",
+      "vmTime": 1843.166792,
+      "pythonTime": 155.723875,
+      "ratio": 11.836122058997056,
+      "vmOutput": "832040",
+      "pythonOutput": "832040",
+      "correct": true
+    },
+    {
+      "name": "List Operations (1000000)",
+      "vmTime": 646.954125,
+      "pythonTime": 84.803167,
+      "ratio": 7.62889108846607,
+      "vmOutput": "499999500000",
+      "pythonOutput": "499999500000",
+      "correct": true
+    },
+    {
+      "name": "Primes (25000-30000)",
+      "vmTime": 120.950042,
+      "pythonTime": 26.878875,
+      "ratio": 4.49981786812134,
+      "vmOutput": "483",
+      "pythonOutput": "483",
+      "correct": true
+    },
+    {
+      "name": "Dictionary Ops (250000)",
+      "vmTime": 530.327291,
+      "pythonTime": 95.514375,
+      "ratio": 5.55232959436734,
+      "vmOutput": "187499",
+      "pythonOutput": "187499",
+      "correct": true
+    },
+    {
+      "name": "Nested Loops (1118x1118)",
+      "vmTime": 829.250541,
+      "pythonTime": 131.430458,
+      "ratio": 6.309424418196885,
+      "vmOutput": "389879106409",
+      "pythonOutput": "389879106409",
+      "correct": true
+    },
+    {
+      "name": "String Operations (100000)",
+      "vmTime": 252.401958,
+      "pythonTime": 65.008625,
+      "ratio": 3.882591856080636,
+      "vmOutput": "100000",
+      "pythonOutput": "100000",
+      "correct": true
+    },
+    {
+      "name": "List Comprehension (250000)",
+      "vmTime": 163.487292,
+      "pythonTime": 33.99575,
+      "ratio": 4.80905089606789,
+      "vmOutput": "2604135416750000",
+      "pythonOutput": "2604135416750000",
+      "correct": true
+    }
+  ]
+}
