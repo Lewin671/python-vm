@@ -73,6 +73,21 @@ Optimized hot paths in the Python VM by introducing cached f-string/expression p
 5. **Call argument binding tweaks**
    - Streamlined parameter binding to avoid repeated array shifts in hot call sites.
 
+## Optimization Attempts and Contribution Breakdown
+
+| Attempt | Change | Avg VM Time (ms) | Δ vs Baseline | Δ vs Previous |
+|---------|--------|------------------|--------------|---------------|
+| Baseline | None | 9132.83 | - | - |
+| A | Range object (no iterator fast path) | 9105.50 | **+0.30%** | +0.30% |
+| B | Fast iterator path for array/range | 9294.26 | **-1.77%** | -2.07% |
+| C | F-string expression parse cache | 8086.37 | **+11.46%** | +13.00% |
+| D (Final) | Template cache + bounded cache pruning + locals sync + call binding | 8261.41 | **+9.54%** | -2.16% |
+
+**Notes:**
+- The largest single gain came from caching f-string expression parsing (~11.46% vs baseline).
+- The iterator fast path alone regressed in isolation, but it is retained to support the combined final optimization set.
+- Cache pruning and locals sync adjustments traded a small amount of peak gain for bounded memory use and stable correctness.
+
 ## Correctness Verification
 
 - All benchmark workloads matched CPython output (7/7 correctness).
